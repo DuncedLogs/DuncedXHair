@@ -532,6 +532,7 @@ function WC:CreateOptionsPanel()
 
     local shapeValues = {
         { text = "Cross", value = "Cross" },
+        { text = "Reversed Cross", value = "ReversedCross" },
         { text = "Circle", value = "Circle" },
         { text = "Square", value = "Square" },
     }
@@ -594,7 +595,7 @@ function WC:CreateOptionsPanel()
 
     local innerLength = makeSlider(content, "Size", 4, 256, 1, function(value)
         self.db.inner_length = value
-        if self.db.shape == "Cross" or self.db.shape == "Square" then
+        if self.db.shape == "Cross" or self.db.shape == "ReversedCross" or self.db.shape == "Square" then
             self.db.width = value
             self.db.height = value
             self.optionsUpdating = true
@@ -885,7 +886,7 @@ function WC:RefreshOptionsPanel()
     panel.lingerSlider:SetValue(db.combatEndDelay or 0)
 
     local canFill = db.shape == "Circle" or db.shape == "Square"
-    local canUseAxes = db.shape == "Cross" or db.shape == "Square"
+    local canUseAxes = db.shape == "Cross" or db.shape == "ReversedCross" or db.shape == "Square"
     panel.thicknessSlider:SetEnabled(true)
     panel.thicknessSlider:SetAlpha(1)
     panel.widthSlider:SetEnabled(canUseAxes)

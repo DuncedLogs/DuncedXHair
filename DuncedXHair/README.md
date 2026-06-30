@@ -26,6 +26,7 @@ Useful commands:
 /dxh size 64
 /dxh thickness 3
 /dxh border 4
+/dxh shape reversed
 /dxh shape circle
 /dxh fill 100
 /dxh combat on
@@ -36,11 +37,11 @@ Useful commands:
 /dxh linger 2
 ```
 
-`shape` supports `cross`, `circle`, and `square`. Use `/dxh shape dot` for a fully filled circle.
+`shape` supports `cross`, `reversed`, `circle`, and `square`. Use `/dxh shape dot` for a fully filled circle.
 
-`thickness` controls line/ring thickness for circle and square, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
+`thickness` controls line/ring thickness for reversed cross, circle, and square, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
 
-Cross, circle, and square each remember their own alpha, thickness, size, width, height, border, and fill settings.
+Cross, reversed cross, circle, and square each remember their own alpha, thickness, size, width, height, border, and fill settings.
 
 Use `/dxh fill 0` for an outline, `/dxh fill 100` for a filled shape, or any value between.
 

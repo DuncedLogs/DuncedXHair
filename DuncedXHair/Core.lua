@@ -48,16 +48,26 @@ WC.visibilityLabels = visibilityLabels
 
 local shapeLabels = {
     Cross = "Cross",
+    ReversedCross = "Reversed Cross",
     Circle = "Circle",
     Square = "Square",
 }
 
 WC.shapeLabels = shapeLabels
 
-local shapeOrder = { "Cross", "Circle", "Square" }
+local shapeOrder = { "Cross", "ReversedCross", "Circle", "Square" }
 local shapeSettingKeys = { "alpha", "thickness", "inner_length", "width", "height", "border_size", "fill" }
 local shapeSettingDefaults = {
     Cross = {
+        alpha = 1,
+        thickness = 2,
+        inner_length = 30,
+        width = 30,
+        height = 30,
+        border_size = 3,
+        fill = 0,
+    },
+    ReversedCross = {
         alpha = 1,
         thickness = 2,
         inner_length = 30,
@@ -389,6 +399,8 @@ function WC:NormalizeShape(value)
     value = trim(value):lower():gsub("[%s_%-]+", "")
     if value == "cross" or value == "plus" or value == "xhair" then
         return "Cross"
+    elseif value == "reversedcross" or value == "reversecross" or value == "hollowcross" or value == "outlinecross" or value == "reversed" or value == "reverse" then
+        return "ReversedCross"
     elseif value == "dot" or value == "filledcircle" then
         return "Circle", 1
     elseif value == "circle" or value == "ring" or value == "round" then
@@ -523,6 +535,76 @@ function WC:ApplyCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g
     self.bars.innerHorizontal.tex:SetDrawLayer("BACKGROUND", 1)
     self.bars.innerHorizontal.tex:SetColorTexture(r, g, b, 1)
     self.bars.innerHorizontal:Show()
+end
+
+function WC:GetReversedCrossArmThickness(width, height, stroke)
+    local minimumDimension = math.max(4, math.min(width or defaults.inner_length, height or width or defaults.inner_length))
+    local armThickness = math.max(minimumDimension * 0.38, (stroke or 1) * 2)
+    return math.min(armThickness, minimumDimension)
+end
+
+function WC:DrawReversedCross(poolName, outerWidth, outerHeight, stroke, armThickness, r, g, b, a, subLevel)
+    outerWidth = math.max(4, outerWidth or defaults.inner_length)
+    outerHeight = math.max(4, outerHeight or outerWidth)
+
+    armThickness = math.min(math.max(1, armThickness or self:GetReversedCrossArmThickness(outerWidth, outerHeight, stroke)), math.min(outerWidth, outerHeight))
+    stroke = math.min(math.max(1, stroke or 1), math.max(1, armThickness / 2))
+
+    local halfWidth = outerWidth / 2
+    local halfHeight = outerHeight / 2
+    local armHalf = armThickness / 2
+    local verticalLength = math.max(0, halfHeight - armHalf)
+    local horizontalLength = math.max(0, halfWidth - armHalf)
+    local index = 0
+
+    local function rect(width, height, x, y)
+        index = index + 1
+        self:SetRect(poolName, index, width, height, x, y, r, g, b, a, subLevel)
+    end
+
+    if verticalLength > 0 then
+        local sideY = armHalf + (verticalLength / 2)
+        rect(armThickness, stroke, 0, halfHeight - (stroke / 2))
+        rect(stroke, verticalLength, -armHalf + (stroke / 2), sideY)
+        rect(stroke, verticalLength, armHalf - (stroke / 2), sideY)
+
+        sideY = -armHalf - (verticalLength / 2)
+        rect(armThickness, stroke, 0, -halfHeight + (stroke / 2))
+        rect(stroke, verticalLength, -armHalf + (stroke / 2), sideY)
+        rect(stroke, verticalLength, armHalf - (stroke / 2), sideY)
+    end
+
+    if horizontalLength > 0 then
+        local leftX = -armHalf - (horizontalLength / 2)
+        local rightX = armHalf + (horizontalLength / 2)
+        local topY = armHalf - (stroke / 2)
+        local bottomY = -armHalf + (stroke / 2)
+
+        rect(horizontalLength, stroke, leftX, topY)
+        rect(horizontalLength, stroke, leftX, bottomY)
+        rect(stroke, armThickness, -halfWidth + (stroke / 2), 0)
+
+        rect(horizontalLength, stroke, rightX, topY)
+        rect(horizontalLength, stroke, rightX, bottomY)
+        rect(stroke, armThickness, halfWidth - (stroke / 2), 0)
+    end
+end
+
+function WC:ApplyReversedCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
+    innerWidth = math.max(4, innerWidth or defaults.inner_length)
+    innerHeight = math.max(4, innerHeight or innerWidth)
+
+    local frameWidth = innerWidth + (borderSize * 2) + 4
+    local frameHeight = innerHeight + (borderSize * 2) + 4
+    local stroke = math.max(1, thickness or 1)
+    local armThickness = self:GetReversedCrossArmThickness(innerWidth, innerHeight, stroke)
+
+    self.frame:SetSize(frameWidth, frameHeight)
+
+    if borderSize > 0 then
+        self:DrawReversedCross("reversedCrossBorder", innerWidth + (borderSize * 2), innerHeight + (borderSize * 2), stroke + (borderSize * 2), armThickness + (borderSize * 2), 0, 0, 0, 1, 0)
+    end
+    self:DrawReversedCross("reversedCrossFill", innerWidth, innerHeight, stroke, armThickness, r, g, b, 1, 1)
 end
 
 function WC:GetFillHoleRadius(radius, thickness, fill)
@@ -763,6 +845,8 @@ function WC:ApplyShape()
             db.shape = "Cross"
             self:ApplyCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
         end
+    elseif shape == "ReversedCross" then
+        self:ApplyReversedCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
     elseif shape == "Square" then
         self:ApplySquareShape(thickness, innerWidth, innerHeight, borderSize, fill, r, g, b)
     else
@@ -1128,7 +1212,7 @@ function WC:PrintHelp()
     self:Print("/dxh options - open options")
     self:Print("/dxh lock, unlock, center, on, off")
     self:Print("/dxh alpha 0.8, thickness 2, size 30, width 45, height 30, border 3, fill 100")
-    self:Print("/dxh shape cross|circle|square. /dxh shape dot selects circle fill 100")
+    self:Print("/dxh shape cross|reversed|circle|square. /dxh shape dot selects circle fill 100")
     self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
     self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
     self:Print("/dxh phases on|off - show only during configured boss phases")
@@ -1187,7 +1271,7 @@ function WC:HandleSlash(message)
     elseif command == "inner" or command == "length" or command == "size" then
         local value = round(clamp(rest, 4, 256))
         self.db.inner_length = value
-        if self.db.shape == "Cross" or self.db.shape == "Square" then
+        if self.db.shape == "Cross" or self.db.shape == "ReversedCross" or self.db.shape == "Square" then
             self.db.width = value
             self.db.height = value
         end
@@ -1219,7 +1303,7 @@ function WC:HandleSlash(message)
     elseif command == "shape" or command == "texture" then
         local shape, requestedFill = self:NormalizeShape(rest)
         if not shape then
-            self:Print("Shape values: cross, circle, square. Dot is circle with fill 100.")
+            self:Print("Shape values: cross, reversed, circle, square. Dot is circle with fill 100.")
         else
             self:SetShape(shape, requestedFill)
             self:ApplySettings()
