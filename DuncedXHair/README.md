@@ -1,6 +1,21 @@
 # DuncedXHair
 
-Standalone WoW addon for a movable, configurable center-screen crosshair.
+![DuncedXHair logo](assets/dxhlogo.png)
+
+Customizable Crosshair with boss phase, combat & instance-based visibility.
+
+## Features
+
+- Movable and lockable crosshair frame
+- Shapes: cross, reversed cross, circle, square
+- Adjustable size, thickness, fill amount, border, alpha, color
+
+## Customizable Visibility Modes
+
+- Boss specific per-phase encounters
+- Combat/out of combat toggle
+- Instanced content toggle
+- Or a combination of all of the above
 
 ## Install
 
