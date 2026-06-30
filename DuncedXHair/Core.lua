@@ -1,0 +1,1134 @@
+local addonName, ns = ...
+
+local WC = {}
+ns.DuncedXHair = WC
+_G.DuncedXHair = WC
+
+local defaults = {
+    enabled = true,
+    locked = true,
+    showWhileUnlocked = true,
+    visibility = "Always",
+    phaseRulesEnabled = false,
+    shape = "Cross",
+    alpha = 1,
+    thickness = 2,
+    inner_length = 30,
+    border_size = 3,
+    lockHorizontal = false,
+    class_colored = true,
+    customR = 1,
+    customG = 1,
+    customB = 1,
+    combatTimingEnabled = false,
+    combatShowAfter = 0,
+    combatHideAfter = 0,
+    combatEndDelay = 0,
+    position = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+    },
+    rules = {},
+}
+
+WC.defaults = defaults
+
+local visibilityLabels = {
+    Always = "Always",
+    Combat = "In Combat",
+    Instance = "In Instance",
+    CombatAndInstance = "In Combat + In Instance",
+    CombatOrInstance = "In Combat or In Instance",
+}
+
+WC.visibilityLabels = visibilityLabels
+
+local shapeLabels = {
+    Cross = "Cross",
+    Dot = "Dot",
+    Circle = "Circle",
+    Square = "Square",
+}
+
+WC.shapeLabels = shapeLabels
+
+local function copyDefaults(source, target)
+    for key, value in pairs(source) do
+        if type(value) == "table" then
+            if type(target[key]) ~= "table" then
+                target[key] = {}
+            end
+            copyDefaults(value, target[key])
+        elseif target[key] == nil then
+            target[key] = value
+        end
+    end
+end
+
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$") or ""
+end
+
+local function clamp(value, minimum, maximum)
+    value = tonumber(value)
+    if not value then
+        return minimum
+    end
+    if value < minimum then
+        return minimum
+    end
+    if value > maximum then
+        return maximum
+    end
+    return value
+end
+
+local function round(value)
+    return math.floor((tonumber(value) or 0) + 0.5)
+end
+
+local function countTableValues(values)
+    local count = 0
+    for _ in pairs(values or {}) do
+        count = count + 1
+    end
+    return count
+end
+
+local function getClassColor()
+    local _, class = UnitClass("player")
+    local color = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[class]) or RAID_CLASS_COLORS[class]
+    if color then
+        return color.r, color.g, color.b
+    end
+    return 1, 1, 1
+end
+
+local function getBossModName(mod)
+    if type(mod) ~= "table" then
+        return mod and tostring(mod) or nil
+    end
+
+    if mod.localization and mod.localization.general and mod.localization.general.name then
+        return mod.localization.general.name
+    end
+    if mod.displayName then
+        return mod.displayName
+    end
+    if mod.name then
+        return mod.name
+    end
+    if mod.moduleName then
+        return mod.moduleName
+    end
+    if mod.id then
+        return tostring(mod.id)
+    end
+
+    return nil
+end
+
+local function getBossModEncounterID(mod)
+    if type(mod) ~= "table" then
+        return nil
+    end
+
+    return mod.engageId or mod.encounterId or mod.journalId
+end
+
+function WC:Print(message)
+    if DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff19ff59DuncedXHair:|r " .. tostring(message))
+    end
+end
+
+function WC:Trim(value)
+    return trim(value)
+end
+
+function WC:NormalizeBossName(value)
+    value = trim(value):lower()
+    value = value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    value = value:gsub("[%s%p%c]+", "")
+    return value
+end
+
+function WC:RuleKey(value)
+    value = trim(value)
+    local id = value:match("^id:%s*(%d+)$")
+    if id then
+        return "id:" .. id
+    end
+    return self:NormalizeBossName(value)
+end
+
+function WC:NormalizeStage(value)
+    if value == nil or value == "" then
+        return nil
+    end
+
+    local text = trim(value):lower():gsub("^p", "")
+    local numberText = text:match("(%d+%.?%d*)")
+    local number = tonumber(numberText)
+    if number then
+        if number == math.floor(number) then
+            return tostring(math.floor(number))
+        end
+        return tostring(number)
+    end
+
+    return text ~= "" and text or nil
+end
+
+function WC:ParsePhaseList(value)
+    local phases = {}
+    for phase in tostring(value or ""):gmatch("%d+%.?%d*") do
+        phase = self:NormalizeStage(phase)
+        if phase then
+            phases[phase] = true
+        end
+    end
+    return phases, countTableValues(phases)
+end
+
+function WC:FormatPhaseList(phases)
+    local values = {}
+    for phase in pairs(phases or {}) do
+        values[#values + 1] = phase
+    end
+
+    table.sort(values, function(left, right)
+        return (tonumber(left) or left) < (tonumber(right) or right)
+    end)
+
+    for index, phase in ipairs(values) do
+        values[index] = "P" .. tostring(phase)
+    end
+
+    return table.concat(values, ", ")
+end
+
+function WC:SetRule(bossName, phaseText)
+    if not self.db then
+        return false, "Addon is not initialized yet."
+    end
+
+    local label = trim(bossName)
+    local key = self:RuleKey(label)
+    if key == "" then
+        return false, "Enter a boss name or id:encounterID."
+    end
+
+    local phases, count = self:ParsePhaseList(phaseText)
+    if count == 0 then
+        return false, "Enter one or more phases, for example 2,4."
+    end
+
+    self.db.rules[key] = {
+        label = label,
+        phases = phases,
+    }
+    self.db.phaseRulesEnabled = true
+
+    self:RefreshVisibility()
+    if self.RefreshOptionsPanel then
+        self:RefreshOptionsPanel()
+    end
+
+    return true
+end
+
+function WC:DeleteRule(bossName)
+    if not self.db then
+        return false, "Addon is not initialized yet."
+    end
+
+    local key = self:RuleKey(bossName)
+    if key == "" or not self.db.rules[key] then
+        return false, "That boss rule was not found."
+    end
+
+    self.db.rules[key] = nil
+    self:RefreshVisibility()
+    if self.RefreshOptionsPanel then
+        self:RefreshOptionsPanel()
+    end
+
+    return true
+end
+
+function WC:GetMatchingRule()
+    if not self.db or not self.db.rules then
+        return nil
+    end
+
+    if self.currentEncounterID then
+        local idKey = "id:" .. tostring(self.currentEncounterID)
+        if self.db.rules[idKey] then
+            return self.db.rules[idKey], idKey
+        end
+    end
+
+    local names = {
+        self.currentEncounterName,
+        self.currentBossModName,
+        self.manualBossName,
+    }
+
+    for _, name in ipairs(names) do
+        local normalized = self:NormalizeBossName(name)
+        if normalized ~= "" then
+            if self.db.rules[normalized] then
+                return self.db.rules[normalized], normalized
+            end
+
+            for key, rule in pairs(self.db.rules) do
+                if key ~= "" and key:sub(1, 3) ~= "id:" then
+                    if normalized:find(key, 1, true) or key:find(normalized, 1, true) then
+                        return rule, key
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+function WC:CreateCrosshair()
+    if self.frame then
+        return
+    end
+
+    local frame = CreateFrame("Frame", "DuncedXHairFrame", UIParent)
+    frame:SetFrameStrata("HIGH")
+    frame:SetFrameLevel(900)
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+
+    frame:SetScript("OnDragStart", function(crosshair)
+        if self.db and not self.db.locked then
+            crosshair:StartMoving()
+        end
+    end)
+
+    frame:SetScript("OnDragStop", function(crosshair)
+        crosshair:StopMovingOrSizing()
+        self:SavePosition()
+    end)
+
+    frame:SetScript("OnMouseUp", function(crosshair)
+        crosshair:StopMovingOrSizing()
+        self:SavePosition()
+    end)
+
+    frame:SetScript("OnHide", function(crosshair)
+        crosshair:StopMovingOrSizing()
+    end)
+
+    local function makeBar(name)
+        local bar = CreateFrame("Frame", name, frame)
+        bar:EnableMouse(false)
+        local texture = bar:CreateTexture(nil, "BACKGROUND")
+        texture:SetAllPoints()
+        bar.tex = texture
+        return bar
+    end
+
+    self.frame = frame
+    self.linePools = {}
+    self.allLines = {}
+    self.bars = {
+        outerVertical = makeBar("DuncedXHairOuterVertical"),
+        outerHorizontal = makeBar("DuncedXHairOuterHorizontal"),
+        innerVertical = makeBar("DuncedXHairInnerVertical"),
+        innerHorizontal = makeBar("DuncedXHairInnerHorizontal"),
+    }
+end
+
+function WC:NormalizeShape(value)
+    value = trim(value):lower():gsub("[%s_%-]+", "")
+    if value == "cross" or value == "plus" or value == "xhair" then
+        return "Cross"
+    elseif value == "dot" then
+        return "Dot"
+    elseif value == "circle" or value == "ring" then
+        return "Circle"
+    elseif value == "square" or value == "box" then
+        return "Square"
+    end
+    return nil
+end
+
+function WC:GetDrawColor()
+    if self.db.class_colored then
+        return getClassColor()
+    end
+    return self.db.customR or 1, self.db.customG or 1, self.db.customB or 1
+end
+
+function WC:HideShapeElements()
+    for _, bar in pairs(self.bars or {}) do
+        bar:Hide()
+    end
+    for _, line in ipairs(self.allLines or {}) do
+        line:Hide()
+    end
+end
+
+function WC:GetLine(poolName, index)
+    if not self.frame or not self.frame.CreateLine then
+        return nil
+    end
+
+    self.linePools[poolName] = self.linePools[poolName] or {}
+    local pool = self.linePools[poolName]
+    if not pool[index] then
+        local line = self.frame:CreateLine(nil, "BACKGROUND")
+        pool[index] = line
+        self.allLines[#self.allLines + 1] = line
+    end
+    return pool[index]
+end
+
+function WC:SetLine(poolName, index, x1, y1, x2, y2, thickness, r, g, b, a, subLevel)
+    local line = self:GetLine(poolName, index)
+    if not line then
+        return
+    end
+
+    if line.SetDrawLayer then
+        line:SetDrawLayer("BACKGROUND", subLevel or 0)
+    end
+    line:SetStartPoint("CENTER", self.frame, x1, y1)
+    line:SetEndPoint("CENTER", self.frame, x2, y2)
+    line:SetThickness(thickness)
+    line:SetColorTexture(r, g, b, a or 1)
+    line:Show()
+end
+
+function WC:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+    local frameSize = innerLength + thickness + borderSize
+    local outerThickness = thickness + borderSize
+    local outerLength = innerLength + borderSize
+
+    self.frame:SetSize(frameSize, frameSize)
+
+    self.bars.outerVertical:ClearAllPoints()
+    self.bars.outerVertical:SetSize(outerThickness, outerLength)
+    self.bars.outerVertical:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
+    self.bars.outerVertical.tex:SetDrawLayer("BACKGROUND", 0)
+    self.bars.outerVertical.tex:SetColorTexture(0, 0, 0, 1)
+    self.bars.outerVertical:Show()
+
+    self.bars.outerHorizontal:ClearAllPoints()
+    self.bars.outerHorizontal:SetSize(outerLength, outerThickness)
+    self.bars.outerHorizontal:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
+    self.bars.outerHorizontal.tex:SetDrawLayer("BACKGROUND", 0)
+    self.bars.outerHorizontal.tex:SetColorTexture(0, 0, 0, 1)
+    self.bars.outerHorizontal:Show()
+
+    self.bars.innerVertical:ClearAllPoints()
+    self.bars.innerVertical:SetSize(thickness, innerLength)
+    self.bars.innerVertical:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
+    self.bars.innerVertical.tex:SetDrawLayer("BACKGROUND", 1)
+    self.bars.innerVertical.tex:SetColorTexture(r, g, b, 1)
+    self.bars.innerVertical:Show()
+
+    self.bars.innerHorizontal:ClearAllPoints()
+    self.bars.innerHorizontal:SetSize(innerLength, thickness)
+    self.bars.innerHorizontal:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
+    self.bars.innerHorizontal.tex:SetDrawLayer("BACKGROUND", 1)
+    self.bars.innerHorizontal.tex:SetColorTexture(r, g, b, 1)
+    self.bars.innerHorizontal:Show()
+end
+
+function WC:ApplyCircleShape(thickness, innerLength, borderSize, r, g, b)
+    local radius = innerLength / 2
+    local frameSize = innerLength + thickness + (borderSize * 2) + 4
+    local segments = 48
+    local outerThickness = math.max(1, thickness + (borderSize * 2))
+
+    self.frame:SetSize(frameSize, frameSize)
+
+    for index = 1, segments do
+        local angle1 = ((index - 1) / segments) * math.pi * 2
+        local angle2 = (index / segments) * math.pi * 2
+        local x1 = math.cos(angle1) * radius
+        local y1 = math.sin(angle1) * radius
+        local x2 = math.cos(angle2) * radius
+        local y2 = math.sin(angle2) * radius
+
+        self:SetLine("circleOuter", index, x1, y1, x2, y2, outerThickness, 0, 0, 0, 1, 0)
+        self:SetLine("circleInner", index, x1, y1, x2, y2, thickness, r, g, b, 1, 1)
+    end
+end
+
+function WC:ApplySquareShape(thickness, innerLength, borderSize, r, g, b)
+    local radius = innerLength / 2
+    local frameSize = innerLength + thickness + (borderSize * 2) + 4
+    local outerThickness = math.max(1, thickness + (borderSize * 2))
+    local points = {
+        { -radius, radius, radius, radius },
+        { radius, radius, radius, -radius },
+        { radius, -radius, -radius, -radius },
+        { -radius, -radius, -radius, radius },
+    }
+
+    self.frame:SetSize(frameSize, frameSize)
+
+    for index, point in ipairs(points) do
+        self:SetLine("squareOuter", index, point[1], point[2], point[3], point[4], outerThickness, 0, 0, 0, 1, 0)
+        self:SetLine("squareInner", index, point[1], point[2], point[3], point[4], thickness, r, g, b, 1, 1)
+    end
+end
+
+function WC:ApplyDotShape(thickness, innerLength, borderSize, r, g, b)
+    local radius = innerLength / 2
+    local outerRadius = radius + borderSize
+    local segments = 19
+    local frameSize = (outerRadius * 2) + 4
+    local outerLineThickness = math.max(1, (outerRadius * 2) / segments)
+    local innerLineThickness = math.max(1, ((radius * 2) / segments) + ((thickness - 1) * 0.1))
+
+    self.frame:SetSize(frameSize, frameSize)
+
+    for index = 1, segments do
+        local y = -outerRadius + ((index - 0.5) * ((outerRadius * 2) / segments))
+        local halfWidth = math.sqrt(math.max(0, (outerRadius * outerRadius) - (y * y)))
+        self:SetLine("dotOuter", index, -halfWidth, y, halfWidth, y, outerLineThickness, 0, 0, 0, 1, 0)
+    end
+
+    for index = 1, segments do
+        local y = -radius + ((index - 0.5) * ((radius * 2) / segments))
+        local halfWidth = math.sqrt(math.max(0, (radius * radius) - (y * y)))
+        self:SetLine("dotInner", index, -halfWidth, y, halfWidth, y, innerLineThickness, r, g, b, 1, 1)
+    end
+end
+
+function WC:ApplyShape()
+    if not self.frame or not self.db then
+        return
+    end
+
+    local db = self.db
+    db.alpha = clamp(db.alpha, 0, 1)
+    db.thickness = round(clamp(db.thickness, 1, 32))
+    db.inner_length = round(clamp(db.inner_length, 4, 256))
+    db.border_size = round(clamp(db.border_size, 0, 64))
+    db.shape = self:NormalizeShape(db.shape) or "Cross"
+
+    local thickness = db.thickness
+    local innerLength = db.inner_length
+    local borderSize = db.border_size
+    local r, g, b = self:GetDrawColor()
+    local shape = db.shape
+
+    self.frame:SetAlpha(db.alpha)
+    self:HideShapeElements()
+
+    if shape == "Circle" and self.frame.CreateLine then
+        self:ApplyCircleShape(thickness, innerLength, borderSize, r, g, b)
+    elseif shape == "Square" and self.frame.CreateLine then
+        self:ApplySquareShape(thickness, innerLength, borderSize, r, g, b)
+    elseif shape == "Dot" and self.frame.CreateLine then
+        self:ApplyDotShape(thickness, innerLength, borderSize, r, g, b)
+    else
+        db.shape = "Cross"
+        self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+    end
+end
+
+function WC:UpdateColor()
+    self:ApplyShape()
+end
+
+function WC:ApplyPosition()
+    if not self.frame or not self.db then
+        return
+    end
+
+    local position = self.db.position or defaults.position
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint(position.point or "CENTER", UIParent, position.relativePoint or "CENTER", position.x or 0, position.y or 0)
+end
+
+function WC:ApplySettings()
+    if not self.frame or not self.db then
+        return
+    end
+
+    self:ApplyShape()
+    self:ApplyPosition()
+    self.frame:EnableMouse(not self.db.locked)
+    self:UpdateCombatTicker()
+    self:RefreshVisibility()
+end
+
+function WC:SavePosition()
+    if not self.frame or not self.db then
+        return
+    end
+
+    local point, _, relativePoint, x, y = self.frame:GetPoint()
+    self.db.position = self.db.position or {}
+    self.db.position.point = point or "CENTER"
+    self.db.position.relativePoint = relativePoint or "CENTER"
+    self.db.position.x = math.floor(((x or 0) * 10) + 0.5) / 10
+    self.db.position.y = math.floor(((y or 0) * 10) + 0.5) / 10
+
+    if self.db.lockHorizontal then
+        self.db.position.x = 0
+        self:ApplyPosition()
+    end
+end
+
+function WC:SetLocked(locked)
+    if not self.db then
+        return
+    end
+
+    self.db.locked = locked and true or false
+    self:ApplySettings()
+    if self.RefreshOptionsPanel then
+        self:RefreshOptionsPanel()
+    end
+end
+
+function WC:Center()
+    if not self.db then
+        return
+    end
+
+    self.db.position = {
+        point = "CENTER",
+        relativePoint = "CENTER",
+        x = 0,
+        y = 0,
+    }
+    self:ApplySettings()
+end
+
+function WC:IsInCombat()
+    return UnitAffectingCombat("player") or (InCombatLockdown and InCombatLockdown())
+end
+
+function WC:UpdateCombatTicker()
+    if not self.db or not C_Timer or not C_Timer.NewTicker then
+        return
+    end
+
+    local timingActive = self.db.combatTimingEnabled and (
+        (self.db.combatShowAfter or 0) > 0 or
+        (self.db.combatHideAfter or 0) > 0 or
+        (self.db.combatEndDelay or 0) > 0
+    )
+
+    if timingActive and not self.combatTicker then
+        self.combatTicker = C_Timer.NewTicker(0.25, function()
+            self:RefreshVisibility()
+        end)
+    elseif not timingActive and self.combatTicker then
+        self.combatTicker:Cancel()
+        self.combatTicker = nil
+    end
+end
+
+function WC:GetCombatElapsed()
+    if not self.combatStartTime then
+        return 0
+    end
+    return math.max(0, GetTime() - self.combatStartTime)
+end
+
+function WC:IsInPostCombatDelay()
+    if not self.db or not self.db.combatTimingEnabled or not self.combatEndTime then
+        return false
+    end
+
+    local delay = tonumber(self.db.combatEndDelay) or 0
+    return delay > 0 and (GetTime() - self.combatEndTime) <= delay
+end
+
+function WC:IsCombatVisibleForBaseVisibility()
+    return self:IsInCombat() or self:IsInPostCombatDelay()
+end
+
+function WC:PassesCombatTiming()
+    if not self.db.combatTimingEnabled then
+        return true
+    end
+
+    local inCombat = self:IsInCombat()
+    if not inCombat then
+        return self:IsInPostCombatDelay()
+    end
+
+    local elapsed = self:GetCombatElapsed()
+    local showAfter = tonumber(self.db.combatShowAfter) or 0
+    local hideAfter = tonumber(self.db.combatHideAfter) or 0
+
+    if showAfter > 0 and elapsed < showAfter then
+        return false
+    end
+    if hideAfter > 0 and elapsed >= hideAfter then
+        return false
+    end
+
+    return true
+end
+
+function WC:PassesBaseVisibility()
+    local mode = self.db.visibility or "Always"
+    local inCombat = self:IsCombatVisibleForBaseVisibility()
+    local inInstance = IsInInstance()
+
+    if mode == "Combat" then
+        return inCombat
+    elseif mode == "Instance" then
+        return inInstance
+    elseif mode == "CombatAndInstance" then
+        return inCombat and inInstance
+    elseif mode == "CombatOrInstance" then
+        return inCombat or inInstance
+    end
+
+    return true
+end
+
+function WC:PassesPhaseRules()
+    if not self.db.phaseRulesEnabled or not next(self.db.rules) then
+        return true
+    end
+
+    local rule = self:GetMatchingRule()
+    if not rule then
+        return false
+    end
+
+    local stage = self:NormalizeStage(self.currentStage or 1)
+    return stage ~= nil and rule.phases[stage] == true
+end
+
+function WC:ShouldShow()
+    if not self.db or not self.db.enabled then
+        return false
+    end
+
+    if self.frame and not self.db.locked and self.db.showWhileUnlocked then
+        return true
+    end
+
+    return self:PassesBaseVisibility() and self:PassesCombatTiming() and self:PassesPhaseRules()
+end
+
+function WC:RefreshVisibility()
+    if not self.frame then
+        return
+    end
+
+    if self:ShouldShow() then
+        self.frame:Show()
+    else
+        self.frame:Hide()
+    end
+end
+
+local function registerBigWigsMessage(target, message, method)
+    local loader = _G.BigWigsLoader
+    if not loader or not loader.RegisterMessage then
+        return false
+    end
+
+    return pcall(loader.RegisterMessage, target, message, method)
+end
+
+function WC:RegisterBossModCallbacks()
+    if _G.BigWigsLoader and not self.bigWigsRegistered then
+        local setStage = registerBigWigsMessage(self, "BigWigs_SetStage", "OnBigWigsSetStage")
+        local engage = registerBigWigsMessage(self, "BigWigs_OnBossEngage", "OnBigWigsBossEngage")
+        local win = registerBigWigsMessage(self, "BigWigs_OnBossWin", "OnBigWigsBossEnd")
+        local wipe = registerBigWigsMessage(self, "BigWigs_OnBossWipe", "OnBigWigsBossEnd")
+        local disable = registerBigWigsMessage(self, "BigWigs_OnBossDisable", "OnBigWigsBossEnd")
+        self.bigWigsRegistered = setStage or engage or win or wipe or disable
+    end
+
+    if _G.DBM and _G.DBM.RegisterCallback and not self.dbmRegistered then
+        self.dbmSetStageCallback = function(event, ...)
+            self:OnDBMSetStage(event, ...)
+        end
+        self.dbmBossEndCallback = function()
+            self:OnDBMBossEnd()
+        end
+
+        pcall(_G.DBM.RegisterCallback, _G.DBM, "DBM_SetStage", self.dbmSetStageCallback)
+        pcall(_G.DBM.RegisterCallback, _G.DBM, "DBM_Kill", self.dbmBossEndCallback)
+        pcall(_G.DBM.RegisterCallback, _G.DBM, "DBM_Wipe", self.dbmBossEndCallback)
+        self.dbmRegistered = true
+    end
+end
+
+function WC:OnBigWigsSetStage(_, module, stage)
+    self.currentBossModName = getBossModName(module) or self.currentBossModName
+    self.currentEncounterID = getBossModEncounterID(module) or self.currentEncounterID
+    self.currentStage = self:NormalizeStage(stage)
+    self:RefreshVisibility()
+end
+
+function WC:OnBigWigsBossEngage(_, module)
+    self.currentBossModName = getBossModName(module) or self.currentBossModName
+    self.currentEncounterID = getBossModEncounterID(module) or self.currentEncounterID
+    self.currentStage = self.currentStage or "1"
+    self:RefreshVisibility()
+end
+
+function WC:OnBigWigsBossEnd()
+    self.currentBossModName = nil
+    self.currentStage = nil
+    self:RefreshVisibility()
+end
+
+function WC:OnDBMSetStage(_, mod, modID, stage, encounterID)
+    self.currentBossModName = getBossModName(mod) or tostring(modID or "") ~= "" and tostring(modID) or self.currentBossModName
+    self.currentEncounterID = encounterID or getBossModEncounterID(mod) or self.currentEncounterID
+    self.currentStage = self:NormalizeStage(stage)
+    self:RefreshVisibility()
+end
+
+function WC:OnDBMBossEnd()
+    self.currentBossModName = nil
+    self.currentStage = nil
+    self:RefreshVisibility()
+end
+
+function WC:ENCOUNTER_START(encounterID, encounterName)
+    self.currentEncounterID = encounterID
+    self.currentEncounterName = encounterName
+    self.currentStage = "1"
+    self:RefreshVisibility()
+end
+
+function WC:ENCOUNTER_END()
+    self.currentEncounterID = nil
+    self.currentEncounterName = nil
+    self.currentBossModName = nil
+    self.currentStage = nil
+    self:RefreshVisibility()
+end
+
+local function parseBoolean(value)
+    value = trim(value):lower()
+    if value == "1" or value == "on" or value == "true" or value == "yes" then
+        return true
+    end
+    if value == "0" or value == "off" or value == "false" or value == "no" then
+        return false
+    end
+    return nil
+end
+
+function WC:NormalizeVisibility(value)
+    value = trim(value):lower():gsub("[%s_%-]+", "")
+    if value == "always" then
+        return "Always"
+    elseif value == "combat" or value == "incombat" then
+        return "Combat"
+    elseif value == "instance" or value == "ininstance" then
+        return "Instance"
+    elseif value == "combatinstance" or value == "combatandinstance" or value == "incombatininstance" then
+        return "CombatAndInstance"
+    elseif value == "combatorinstance" then
+        return "CombatOrInstance"
+    end
+    return nil
+end
+
+function WC:PrintRules()
+    if not self.db or not next(self.db.rules) then
+        self:Print("No boss phase rules are configured.")
+        return
+    end
+
+    self:Print("Boss phase rules:")
+    for key, rule in pairs(self.db.rules) do
+        self:Print("  " .. (rule.label or key) .. " -> " .. self:FormatPhaseList(rule.phases))
+    end
+end
+
+function WC:PrintStatus()
+    local db = self.db
+    if not db then
+        return
+    end
+
+    local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
+    local currentStage = self.currentStage or "none"
+    self:Print("enabled=" .. tostring(db.enabled) ..
+        ", locked=" .. tostring(db.locked) ..
+        ", shape=" .. tostring(shapeLabels[db.shape] or db.shape) ..
+        ", visibility=" .. tostring(visibilityLabels[db.visibility] or db.visibility) ..
+        ", combatTiming=" .. tostring(db.combatTimingEnabled) ..
+        ", showAfter=" .. tostring(db.combatShowAfter or 0) ..
+        ", hideAfter=" .. tostring(db.combatHideAfter or 0) ..
+        ", linger=" .. tostring(db.combatEndDelay or 0) ..
+        ", phaseRules=" .. tostring(db.phaseRulesEnabled) ..
+        ", currentBoss=" .. tostring(currentBoss) ..
+        ", currentPhase=" .. tostring(currentStage))
+end
+
+function WC:PrintHelp()
+    self:Print("Commands:")
+    self:Print("/wcx options - open options")
+    self:Print("/wcx lock, unlock, center, on, off")
+    self:Print("/wcx alpha 0.8, thickness 2, inner 30, border 3")
+    self:Print("/wcx shape cross|dot|circle|square")
+    self:Print("/wcx visibility always|combat|instance|combatinstance|combatorinstance")
+    self:Print("/wcx timing on|off, showafter 3, hideafter 20, linger 2")
+    self:Print("/wcx phases on|off - show only during configured boss phases")
+    self:Print("/wcx rule lura 4 - show on P4 for boss names containing Lura")
+    self:Print("/wcx rule lura 2,4 - show on P2 and P4")
+    self:Print("/wcx color class or /wcx color 0 1 0")
+    self:Print("/wcx delrule lura, /wcx rules, /wcx status")
+end
+
+function WC:OpenOptions()
+    self:PrintHelp()
+end
+
+function WC:HandleSlash(message)
+    message = trim(message)
+    if message == "" or message:lower() == "options" or message:lower() == "config" then
+        self:OpenOptions()
+        return
+    end
+
+    local command, rest = message:match("^(%S+)%s*(.-)$")
+    command = (command or ""):lower()
+    rest = trim(rest)
+
+    if command == "help" then
+        self:PrintHelp()
+    elseif command == "on" or command == "enable" then
+        self.db.enabled = true
+        self:RefreshVisibility()
+        self:Print("Enabled.")
+    elseif command == "off" or command == "disable" then
+        self.db.enabled = false
+        self:RefreshVisibility()
+        self:Print("Disabled.")
+    elseif command == "lock" then
+        self:SetLocked(true)
+        self:Print("Locked.")
+    elseif command == "unlock" then
+        self:SetLocked(false)
+        self:Print("Unlocked. Drag the crosshair, then /wcx lock.")
+    elseif command == "center" or command == "reset" then
+        self:Center()
+        self:Print("Moved to screen center.")
+    elseif command == "alpha" or command == "opacity" then
+        local value = tonumber(rest)
+        if value and value > 1 then
+            value = value / 100
+        end
+        self.db.alpha = clamp(value, 0, 1)
+        self:ApplySettings()
+        self:Print("Alpha set to " .. string.format("%.2f", self.db.alpha) .. ".")
+    elseif command == "thickness" then
+        self.db.thickness = round(clamp(rest, 1, 32))
+        self:ApplySettings()
+        self:Print("Thickness set to " .. self.db.thickness .. ".")
+    elseif command == "inner" or command == "length" or command == "size" then
+        self.db.inner_length = round(clamp(rest, 4, 256))
+        self:ApplySettings()
+        self:Print("Inner length set to " .. self.db.inner_length .. ".")
+    elseif command == "border" then
+        self.db.border_size = round(clamp(rest, 0, 64))
+        self:ApplySettings()
+        self:Print("Border size set to " .. self.db.border_size .. ".")
+    elseif command == "shape" or command == "texture" then
+        local shape = self:NormalizeShape(rest)
+        if not shape then
+            self:Print("Shape values: cross, dot, circle, square.")
+        else
+            self.db.shape = shape
+            self:ApplySettings()
+            self:Print("Shape set to " .. shapeLabels[shape] .. ".")
+        end
+    elseif command == "horizontal" or command == "lockhorizontal" then
+        local enabled = parseBoolean(rest)
+        if enabled == nil then
+            enabled = not self.db.lockHorizontal
+        end
+        self.db.lockHorizontal = enabled
+        self:SavePosition()
+        self:Print("Lock horizontal " .. (enabled and "enabled." or "disabled."))
+    elseif command == "visibility" or command == "show" then
+        local visibility = self:NormalizeVisibility(rest)
+        if not visibility then
+            self:Print("Visibility values: always, combat, instance, combatinstance, combatorinstance.")
+        else
+            self.db.visibility = visibility
+            self:RefreshVisibility()
+            self:Print("Visibility set to " .. visibilityLabels[visibility] .. ".")
+        end
+    elseif command == "combat" or command == "combatonly" then
+        local enabled = parseBoolean(rest)
+        if enabled == nil then
+            enabled = self.db.visibility ~= "Combat"
+        end
+        self.db.visibility = enabled and "Combat" or "Always"
+        self:RefreshVisibility()
+        self:Print("Combat-only visibility " .. (enabled and "enabled." or "disabled."))
+    elseif command == "timing" or command == "combattiming" then
+        local enabled = parseBoolean(rest)
+        if enabled == nil then
+            enabled = not self.db.combatTimingEnabled
+        end
+        self.db.combatTimingEnabled = enabled
+        self:ApplySettings()
+        self:Print("Combat timing " .. (enabled and "enabled." or "disabled."))
+    elseif command == "showafter" or command == "combatshowafter" then
+        self.db.combatShowAfter = clamp(rest, 0, 600)
+        self.db.combatTimingEnabled = true
+        self:ApplySettings()
+        self:Print("Combat show-after set to " .. self.db.combatShowAfter .. " seconds.")
+    elseif command == "hideafter" or command == "combathideafter" then
+        self.db.combatHideAfter = clamp(rest, 0, 600)
+        self.db.combatTimingEnabled = true
+        self:ApplySettings()
+        self:Print("Combat hide-after set to " .. self.db.combatHideAfter .. " seconds.")
+    elseif command == "linger" or command == "enddelay" or command == "combatenddelay" then
+        self.db.combatEndDelay = clamp(rest, 0, 120)
+        self.db.combatTimingEnabled = true
+        self:ApplySettings()
+        self:Print("Post-combat linger set to " .. self.db.combatEndDelay .. " seconds.")
+    elseif command == "phases" or command == "phaseonly" then
+        local enabled = parseBoolean(rest)
+        if enabled == nil then
+            enabled = not self.db.phaseRulesEnabled
+        end
+        self.db.phaseRulesEnabled = enabled
+        self:RefreshVisibility()
+        self:Print("Boss phase rules " .. (enabled and "enabled." or "disabled."))
+    elseif command == "rule" then
+        local boss, phases = rest:match("^(.-)%s+([pP%d%.%,%s]+)$")
+        local ok, errorMessage = self:SetRule(boss, phases)
+        if ok then
+            self:Print("Saved rule for " .. trim(boss) .. " -> " .. self:FormatPhaseList(self.db.rules[self:RuleKey(boss)].phases) .. ".")
+        else
+            self:Print(errorMessage)
+        end
+    elseif command == "delrule" or command == "removerule" then
+        local ok, errorMessage = self:DeleteRule(rest)
+        self:Print(ok and "Deleted rule." or errorMessage)
+    elseif command == "rules" then
+        self:PrintRules()
+    elseif command == "color" then
+        local r, g, b = rest:match("^(%S+)%s+(%S+)%s+(%S+)$")
+        if rest:lower() == "class" then
+            self.db.class_colored = true
+            self:UpdateColor()
+            self:Print("Using class color.")
+        elseif r and g and b then
+            self.db.class_colored = false
+            self.db.customR = clamp(r, 0, 1)
+            self.db.customG = clamp(g, 0, 1)
+            self.db.customB = clamp(b, 0, 1)
+            self:UpdateColor()
+            self:Print("Using custom color.")
+        else
+            self:Print("Use /wcx color class or /wcx color 0 1 0.")
+        end
+    elseif command == "phase" then
+        self.currentStage = self:NormalizeStage(rest)
+        self:RefreshVisibility()
+        self:Print("Manual current phase set to " .. tostring(self.currentStage) .. ".")
+    elseif command == "boss" then
+        self.manualBossName = rest ~= "" and rest or nil
+        self:RefreshVisibility()
+        self:Print("Manual boss set to " .. tostring(self.manualBossName or "none") .. ".")
+    elseif command == "status" then
+        self:PrintStatus()
+    else
+        self:PrintHelp()
+    end
+
+    if self.RefreshOptionsPanel then
+        self:RefreshOptionsPanel()
+    end
+end
+
+function WC:PLAYER_REGEN_DISABLED()
+    self.combatStartTime = GetTime()
+    self.combatEndTime = nil
+    self:UpdateCombatTicker()
+    self:RefreshVisibility()
+end
+
+function WC:PLAYER_REGEN_ENABLED()
+    self.combatEndTime = GetTime()
+    self:UpdateCombatTicker()
+    self:RefreshVisibility()
+end
+
+function WC:PLAYER_ENTERING_WORLD()
+    if self:IsInCombat() then
+        self.combatStartTime = self.combatStartTime or GetTime()
+        self.combatEndTime = nil
+    else
+        self.combatStartTime = nil
+        self.combatEndTime = nil
+    end
+    self:UpdateCombatTicker()
+    self:RefreshVisibility()
+    self:RegisterBossModCallbacks()
+end
+
+function WC:ADDON_LOADED(loadedAddonName)
+    if loadedAddonName == addonName then
+        DuncedXHairDB = DuncedXHairDB or WilduCrosshairDB or {}
+        copyDefaults(defaults, DuncedXHairDB)
+        self.db = DuncedXHairDB
+
+        self:CreateCrosshair()
+        self:ApplySettings()
+
+        self.eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        self.eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+        self.eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        self.eventFrame:RegisterEvent("ENCOUNTER_START")
+        self.eventFrame:RegisterEvent("ENCOUNTER_END")
+
+        SLASH_DUNCEDXHAIR1 = "/dxh"
+        SLASH_DUNCEDXHAIR2 = "/duncedxhair"
+        SLASH_DUNCEDXHAIR3 = "/wcx"
+        SLASH_DUNCEDXHAIR4 = "/crosshair"
+        SlashCmdList.DUNCEDXHAIR = function(slashMessage)
+            self:HandleSlash(slashMessage)
+        end
+
+        if self.RegisterOptions then
+            self:RegisterOptions()
+        end
+
+        self:RegisterBossModCallbacks()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(2, function()
+                self:RegisterBossModCallbacks()
+            end)
+        end
+    elseif self.db and loadedAddonName and (loadedAddonName:find("BigWigs") or loadedAddonName:find("DBM")) then
+        self:RegisterBossModCallbacks()
+    end
+end
+
+WC.eventFrame = CreateFrame("Frame")
+WC.eventFrame:RegisterEvent("ADDON_LOADED")
+WC.eventFrame:SetScript("OnEvent", function(_, event, ...)
+    if WC[event] then
+        WC[event](WC, ...)
+    end
+end)
