@@ -27,8 +27,9 @@ Useful commands:
 /dxh thickness 3
 /dxh border 4
 /dxh shape circle
-/dxh renderer glyph
-/dxh renderer geometry
+/dxh shape unicode
+/dxh symbol +
+/dxh symbol filledcircle
 /dxh weight bold
 /dxh fill 100
 /dxh combat on
@@ -39,9 +40,9 @@ Useful commands:
 /dxh linger 2
 ```
 
-`shape` supports `cross`, `circle`, and `square`. `renderer` supports `glyph` and `geometry` for circle and square shapes. Glyph mode uses smooth font symbols, while geometry mode uses the older line/rectangle drawing. `weight` supports `light`, `regular`, `medium`, and `bold` in glyph mode.
+`shape` supports `cross`, `circle`, `square`, and `unicode`. Unicode mode uses a selectable font symbol such as `+`, `○`, `●`, `□`, or `■`. Use `/dxh symbol +` or pick a symbol in the options panel. `weight` supports `light`, `regular`, `medium`, and `bold` in unicode mode.
 
-`thickness` controls line/ring thickness in geometry mode, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
+`thickness` controls line/ring thickness for circle and square, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
 
 Use `/dxh fill 0` for an outline, `/dxh fill 100` for a filled shape, or any value between.
 

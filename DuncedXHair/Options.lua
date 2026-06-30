@@ -287,6 +287,7 @@ function WC:CreateOptionsPanel()
         { text = "Cross", value = "Cross" },
         { text = "Circle", value = "Circle" },
         { text = "Square", value = "Square" },
+        { text = "Unicode", value = "Unicode" },
     }
     local shape = makeDropdown(panel, 140, shapeValues, function(value)
         self.db.shape = value
@@ -294,23 +295,20 @@ function WC:CreateOptionsPanel()
     shape:SetPoint("TOPLEFT", shapeLabel, "BOTTOMLEFT", -16, -2)
     panel.shapeDropdown = shape
 
-    local rendererLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    rendererLabel:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -12)
-    rendererLabel:SetText("Renderer")
+    local symbolLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    symbolLabel:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -12)
+    symbolLabel:SetText("Unicode symbol")
 
-    local rendererValues = {
-        { text = "Glyph", value = "Glyph" },
-        { text = "Geometry", value = "Geometry" },
-    }
-    local renderer = makeDropdown(panel, 140, rendererValues, function(value)
-        self.db.renderer = value
+    local symbol = makeDropdown(panel, 140, self.unicodeSymbolValues, function(value)
+        self.db.shape = "Unicode"
+        self.db.unicodeSymbol = value
     end)
-    renderer:SetPoint("TOPLEFT", rendererLabel, "BOTTOMLEFT", -16, -2)
-    panel.rendererDropdown = renderer
+    symbol:SetPoint("TOPLEFT", symbolLabel, "BOTTOMLEFT", -16, -2)
+    panel.unicodeSymbolDropdown = symbol
 
     local glyphWeightLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    glyphWeightLabel:SetPoint("TOPLEFT", renderer, "BOTTOMLEFT", 16, -12)
-    glyphWeightLabel:SetText("Glyph weight")
+    glyphWeightLabel:SetPoint("TOPLEFT", symbol, "BOTTOMLEFT", 16, -12)
+    glyphWeightLabel:SetText("Unicode weight")
 
     local glyphWeightValues = {
         { text = "Light", value = "Light" },
@@ -534,9 +532,9 @@ function WC:RefreshOptionsPanel()
     UIDropDownMenu_SetText(panel.visibilityDropdown, self.visibilityLabels[db.visibility] or db.visibility)
     UIDropDownMenu_SetSelectedValue(panel.shapeDropdown, db.shape)
     UIDropDownMenu_SetText(panel.shapeDropdown, self.shapeLabels[db.shape] or db.shape)
-    local renderer = self:NormalizeRenderer(db.renderer) or "Glyph"
-    UIDropDownMenu_SetSelectedValue(panel.rendererDropdown, renderer)
-    UIDropDownMenu_SetText(panel.rendererDropdown, self.rendererLabels[renderer] or renderer)
+    local unicodeSymbol = self:NormalizeUnicodeSymbol(db.unicodeSymbol) or "+"
+    UIDropDownMenu_SetSelectedValue(panel.unicodeSymbolDropdown, unicodeSymbol)
+    UIDropDownMenu_SetText(panel.unicodeSymbolDropdown, unicodeSymbol)
     local glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or "Regular"
     UIDropDownMenu_SetSelectedValue(panel.glyphWeightDropdown, glyphWeight)
     UIDropDownMenu_SetText(panel.glyphWeightDropdown, self.glyphWeightLabels[glyphWeight] or glyphWeight)
@@ -552,9 +550,11 @@ function WC:RefreshOptionsPanel()
     panel.lingerSlider:SetValue(db.combatEndDelay or 0)
 
     local canFill = db.shape == "Circle" or db.shape == "Square"
+    local isUnicode = db.shape == "Unicode"
     panel.fillSlider:SetEnabled(canFill)
     panel.fillSlider:SetAlpha(canFill and 1 or 0.45)
-    panel.glyphWeightDropdown:SetAlpha(renderer == "Glyph" and canFill and 1 or 0.45)
+    panel.unicodeSymbolDropdown:SetAlpha(isUnicode and 1 or 0.45)
+    panel.glyphWeightDropdown:SetAlpha(isUnicode and 1 or 0.45)
 
     local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
     local currentStage = self.currentStage or "none"

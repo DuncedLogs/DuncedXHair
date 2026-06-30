@@ -11,7 +11,7 @@ local defaults = {
     visibility = "Always",
     phaseRulesEnabled = false,
     shape = "Cross",
-    renderer = "Glyph",
+    unicodeSymbol = "+",
     glyphWeight = "Regular",
     alpha = 1,
     thickness = 2,
@@ -52,16 +52,10 @@ local shapeLabels = {
     Cross = "Cross",
     Circle = "Circle",
     Square = "Square",
+    Unicode = "Unicode",
 }
 
 WC.shapeLabels = shapeLabels
-
-local rendererLabels = {
-    Geometry = "Geometry",
-    Glyph = "Glyph",
-}
-
-WC.rendererLabels = rendererLabels
 
 local glyphWeightLabels = {
     Light = "Light",
@@ -71,6 +65,31 @@ local glyphWeightLabels = {
 }
 
 WC.glyphWeightLabels = glyphWeightLabels
+
+local unicodeSymbolValues = {
+    { text = "+", value = "+" },
+    { text = "○", value = "○" },
+    { text = "●", value = "●" },
+    { text = "□", value = "□" },
+    { text = "■", value = "■" },
+    { text = "•", value = "•" },
+    { text = "◎", value = "◎" },
+    { text = "◉", value = "◉" },
+    { text = "◇", value = "◇" },
+    { text = "◆", value = "◆" },
+    { text = "△", value = "△" },
+    { text = "▲", value = "▲" },
+    { text = "✚", value = "✚" },
+    { text = "✛", value = "✛" },
+    { text = "✜", value = "✜" },
+    { text = "✕", value = "✕" },
+    { text = "×", value = "×" },
+    { text = "*", value = "*" },
+    { text = "✦", value = "✦" },
+    { text = "★", value = "★" },
+}
+
+WC.unicodeSymbolValues = unicodeSymbolValues
 
 local glyphFont = "Fonts\\ARIALN.TTF"
 
@@ -385,16 +404,8 @@ function WC:NormalizeShape(value)
         return "Circle"
     elseif value == "square" or value == "box" then
         return "Square"
-    end
-    return nil
-end
-
-function WC:NormalizeRenderer(value)
-    value = trim(value):lower():gsub("[%s_%-]+", "")
-    if value == "geometry" or value == "line" or value == "lines" or value == "bar" or value == "bars" then
-        return "Geometry"
-    elseif value == "glyph" or value == "font" or value == "unicode" or value == "text" then
-        return "Glyph"
+    elseif value == "unicode" or value == "symbol" or value == "font" or value == "glyph" or value == "text" then
+        return "Unicode"
     end
     return nil
 end
@@ -411,6 +422,49 @@ function WC:NormalizeGlyphWeight(value)
         return "Bold"
     end
     return nil
+end
+
+function WC:NormalizeUnicodeSymbol(value)
+    value = trim(value)
+    if value == "" then
+        return nil
+    end
+
+    local compact = value:lower():gsub("[%s_%-_]+", "")
+    local aliases = {
+        plus = "+",
+        cross = "+",
+        circle = "○",
+        ring = "○",
+        outlinecircle = "○",
+        dot = "●",
+        filledcircle = "●",
+        bullet = "•",
+        square = "□",
+        outlinesquare = "□",
+        box = "□",
+        filledsquare = "■",
+        diamond = "◇",
+        filleddiamond = "◆",
+        triangle = "△",
+        filledtriangle = "▲",
+        x = "×",
+        multiply = "×",
+        star = "★",
+        sparkle = "✦",
+        asterisk = "*",
+    }
+    if aliases[compact] then
+        return aliases[compact]
+    end
+
+    for _, option in ipairs(unicodeSymbolValues) do
+        if value == option.value then
+            return option.value
+        end
+    end
+
+    return value
 end
 
 function WC:GetDrawColor()
@@ -709,17 +763,8 @@ function WC:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
     self:DrawSquareBand("squareFill", half, holeHalf, r, g, b, 1, 1)
 end
 
-function WC:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b)
-    local symbols
-    if shape == "Circle" then
-        symbols = { outline = "○", filled = "●" }
-    elseif shape == "Square" then
-        symbols = { outline = "□", filled = "■" }
-    else
-        return false
-    end
-
-    fill = clamp(fill, 0, 1)
+function WC:ApplyUnicodeShape(innerLength, borderSize, r, g, b)
+    local symbol = self:NormalizeUnicodeSymbol(self.db.unicodeSymbol) or defaults.unicodeSymbol
     local weight = self:NormalizeGlyphWeight(self.db.glyphWeight) or defaults.glyphWeight
     local fontSize = math.max(4, innerLength)
     local borderFontSize = fontSize + (borderSize * 2)
@@ -729,21 +774,10 @@ function WC:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b)
     self.frame:SetSize(frameSize, frameSize)
 
     if borderSize > 0 then
-        if fill > 0 then
-            ok = self:DrawGlyphStack("glyphBorderFill", symbols.filled, borderFontSize, weight, 0, 0, 0, fill, 0) and ok
-        end
-        if fill < 1 then
-            ok = self:DrawGlyphStack("glyphBorderOutline", symbols.outline, borderFontSize, weight, 0, 0, 0, 1, 1) and ok
-        end
+        ok = self:DrawGlyphStack("unicodeBorder", symbol, borderFontSize, weight, 0, 0, 0, 1, 0) and ok
     end
 
-    if fill > 0 then
-        ok = self:DrawGlyphStack("glyphColorFill", symbols.filled, fontSize, weight, r, g, b, fill, 2) and ok
-    end
-    if fill < 1 then
-        ok = self:DrawGlyphStack("glyphColorOutline", symbols.outline, fontSize, weight, r, g, b, 1, 3) and ok
-    end
-
+    ok = self:DrawGlyphStack("unicodeColor", symbol, fontSize, weight, r, g, b, 1, 1) and ok
     return ok
 end
 
@@ -759,7 +793,7 @@ function WC:ApplyShape()
     db.border_size = round(clamp(db.border_size, 0, 64))
     db.fill = clamp(db.fill, 0, 1)
     db.shape = self:NormalizeShape(db.shape) or "Cross"
-    db.renderer = self:NormalizeRenderer(db.renderer) or defaults.renderer
+    db.unicodeSymbol = self:NormalizeUnicodeSymbol(db.unicodeSymbol) or defaults.unicodeSymbol
     db.glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or defaults.glyphWeight
 
     local thickness = db.thickness
@@ -773,12 +807,6 @@ function WC:ApplyShape()
     self:HideShapeElements()
 
     if shape == "Circle" then
-        if db.renderer == "Glyph" then
-            if self:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b) then
-                return
-            end
-            self:HideShapeElements()
-        end
         if self.frame.CreateLine then
             self:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
         else
@@ -786,13 +814,15 @@ function WC:ApplyShape()
             self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
         end
     elseif shape == "Square" then
-        if db.renderer == "Glyph" then
-            if self:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b) then
-                return
-            end
-            self:HideShapeElements()
-        end
         self:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
+    elseif shape == "Unicode" then
+        if self:ApplyUnicodeShape(innerLength, borderSize, r, g, b) then
+            return
+        else
+            self:HideShapeElements()
+            db.shape = "Cross"
+            self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+        end
     else
         db.shape = "Cross"
         self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
@@ -1126,8 +1156,8 @@ function WC:PrintStatus()
     self:Print("enabled=" .. tostring(db.enabled) ..
         ", locked=" .. tostring(db.locked) ..
         ", shape=" .. tostring(shapeLabels[db.shape] or db.shape) ..
-        ", renderer=" .. tostring(rendererLabels[db.renderer] or db.renderer) ..
-        ", glyphWeight=" .. tostring(glyphWeightLabels[db.glyphWeight] or db.glyphWeight) ..
+        ", unicodeSymbol=" .. tostring(db.unicodeSymbol or defaults.unicodeSymbol) ..
+        ", unicodeWeight=" .. tostring(glyphWeightLabels[db.glyphWeight] or db.glyphWeight) ..
         ", fill=" .. string.format("%.0f", (db.fill or 0) * 100) .. "%" ..
         ", visibility=" .. tostring(visibilityLabels[db.visibility] or db.visibility) ..
         ", combatTiming=" .. tostring(db.combatTimingEnabled) ..
@@ -1144,8 +1174,8 @@ function WC:PrintHelp()
     self:Print("/dxh options - open options")
     self:Print("/dxh lock, unlock, center, on, off")
     self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3, fill 100")
-    self:Print("/dxh shape cross|circle|square. /dxh shape dot selects circle fill 100")
-    self:Print("/dxh renderer glyph|geometry, weight light|regular|medium|bold")
+    self:Print("/dxh shape cross|circle|square|unicode. /dxh shape dot selects circle fill 100")
+    self:Print("/dxh symbol +, symbol circle, symbol filledcircle, weight light|regular|medium|bold")
     self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
     self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
     self:Print("/dxh phases on|off - show only during configured boss phases")
@@ -1232,14 +1262,15 @@ function WC:HandleSlash(message)
             self:ApplySettings()
             self:Print("Shape set to " .. shapeLabels[shape] .. ".")
         end
-    elseif command == "renderer" or command == "render" then
-        local renderer = self:NormalizeRenderer(rest)
-        if not renderer then
-            self:Print("Renderer values: glyph, geometry.")
+    elseif command == "symbol" or command == "unicode" or command == "glyph" then
+        local symbol = self:NormalizeUnicodeSymbol(rest)
+        if not symbol then
+            self:Print("Use /dxh symbol +, circle, filledcircle, square, filledsquare, diamond, triangle, x, star, or a custom symbol.")
         else
-            self.db.renderer = renderer
+            self.db.shape = "Unicode"
+            self.db.unicodeSymbol = symbol
             self:ApplySettings()
-            self:Print("Renderer set to " .. rendererLabels[renderer] .. ".")
+            self:Print("Unicode symbol set to " .. symbol .. ".")
         end
     elseif command == "weight" or command == "glyphweight" or command == "fontweight" then
         local weight = self:NormalizeGlyphWeight(rest)
@@ -1248,7 +1279,7 @@ function WC:HandleSlash(message)
         else
             self.db.glyphWeight = weight
             self:ApplySettings()
-            self:Print("Glyph weight set to " .. glyphWeightLabels[weight] .. ".")
+            self:Print("Unicode weight set to " .. glyphWeightLabels[weight] .. ".")
         end
     elseif command == "horizontal" or command == "lockhorizontal" then
         local enabled = parseBoolean(rest)
