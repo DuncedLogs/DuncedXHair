@@ -881,17 +881,17 @@ end
 
 function WC:PrintHelp()
     self:Print("Commands:")
-    self:Print("/wcx options - open options")
-    self:Print("/wcx lock, unlock, center, on, off")
-    self:Print("/wcx alpha 0.8, thickness 2, inner 30, border 3")
-    self:Print("/wcx shape cross|dot|circle|square")
-    self:Print("/wcx visibility always|combat|instance|combatinstance|combatorinstance")
-    self:Print("/wcx timing on|off, showafter 3, hideafter 20, linger 2")
-    self:Print("/wcx phases on|off - show only during configured boss phases")
-    self:Print("/wcx rule lura 4 - show on P4 for boss names containing Lura")
-    self:Print("/wcx rule lura 2,4 - show on P2 and P4")
-    self:Print("/wcx color class or /wcx color 0 1 0")
-    self:Print("/wcx delrule lura, /wcx rules, /wcx status")
+    self:Print("/dxh options - open options")
+    self:Print("/dxh lock, unlock, center, on, off")
+    self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3")
+    self:Print("/dxh shape cross|dot|circle|square")
+    self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
+    self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
+    self:Print("/dxh phases on|off - show only during configured boss phases")
+    self:Print("/dxh rule lura 4 - show on P4 for boss names containing Lura")
+    self:Print("/dxh rule lura 2,4 - show on P2 and P4")
+    self:Print("/dxh color class or /dxh color 0 1 0")
+    self:Print("/dxh delrule lura, /dxh rules, /dxh status")
 end
 
 function WC:OpenOptions()
@@ -924,7 +924,7 @@ function WC:HandleSlash(message)
         self:Print("Locked.")
     elseif command == "unlock" then
         self:SetLocked(false)
-        self:Print("Unlocked. Drag the crosshair, then /wcx lock.")
+        self:Print("Unlocked. Drag the crosshair, then /dxh lock.")
     elseif command == "center" or command == "reset" then
         self:Center()
         self:Print("Moved to screen center.")
@@ -1040,7 +1040,7 @@ function WC:HandleSlash(message)
             self:UpdateColor()
             self:Print("Using custom color.")
         else
-            self:Print("Use /wcx color class or /wcx color 0 1 0.")
+            self:Print("Use /dxh color class or /dxh color 0 1 0.")
         end
     elseif command == "phase" then
         self.currentStage = self:NormalizeStage(rest)
@@ -1103,9 +1103,6 @@ function WC:ADDON_LOADED(loadedAddonName)
         self.eventFrame:RegisterEvent("ENCOUNTER_END")
 
         SLASH_DUNCEDXHAIR1 = "/dxh"
-        SLASH_DUNCEDXHAIR2 = "/duncedxhair"
-        SLASH_DUNCEDXHAIR3 = "/wcx"
-        SLASH_DUNCEDXHAIR4 = "/crosshair"
         SlashCmdList.DUNCEDXHAIR = function(slashMessage)
             self:HandleSlash(slashMessage)
         end

@@ -16,7 +16,7 @@ Standalone World of Warcraft addon for a movable center-screen crosshair with co
 
 ## Install
 
-Download `DuncedXHair.zip` from a GitHub Actions artifact or release, then extract it into:
+Download `DuncedXHair.zip` from the latest release, then extract it into:
 
 ```text
 World of Warcraft/_retail_/Interface/AddOns/
@@ -32,47 +32,20 @@ World of Warcraft/_retail_/Interface/AddOns/DuncedXHair/DuncedXHair.toc
 
 ```text
 /dxh options
-/wcx options
-/wcx unlock
-/wcx lock
-/wcx center
-/wcx shape cross
-/wcx shape dot
-/wcx shape circle
-/wcx shape square
-/wcx size 64
-/wcx thickness 3
-/wcx border 4
-/wcx timing on
-/wcx showafter 3
-/wcx hideafter 20
-/wcx linger 2
-/wcx phases on
-/wcx rule lura 2,4
-```
-
-## Packaging
-
-This repository includes a GitHub Actions workflow that creates `DuncedXHair.zip` with the correct addon folder structure.
-
-Manual PowerShell packaging:
-
-```powershell
-Compress-Archive -Path .\DuncedXHair -DestinationPath .\DuncedXHair.zip -Force
-```
-
-## Publishing To GitHub
-
-Create an empty GitHub repository named `DuncedXHair`, then run:
-
-```powershell
-git remote add origin https://github.com/YOUR_USERNAME/DuncedXHair.git
-git push -u origin main
-```
-
-To create a release with an attached addon zip, push a version tag:
-
-```powershell
-git tag v1.1.0
-git push origin v1.1.0
+/dxh unlock
+/dxh lock
+/dxh center
+/dxh shape cross
+/dxh shape dot
+/dxh shape circle
+/dxh shape square
+/dxh size 64
+/dxh thickness 3
+/dxh border 4
+/dxh timing on
+/dxh showafter 3
+/dxh hideafter 20
+/dxh linger 2
+/dxh phases on
+/dxh rule lura 2,4
 ```

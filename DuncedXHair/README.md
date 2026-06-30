@@ -1,6 +1,6 @@
 # DuncedXHair
 
-Standalone WoW addon for a movable plus-shaped center-screen crosshair.
+Standalone WoW addon for a movable, configurable center-screen crosshair.
 
 ## Install
 
@@ -14,25 +14,25 @@ Then enable `DuncedXHair` on the character select addon screen.
 
 ## Setup
 
-Use `/dxh`, `/wcx`, or `/crosshair` in game.
+Use `/dxh` in game.
 
 Useful commands:
 
 ```text
-/wcx options
-/wcx unlock
-/wcx lock
-/wcx center
-/wcx size 64
-/wcx thickness 3
-/wcx border 4
-/wcx shape circle
-/wcx combat on
-/wcx combat off
-/wcx timing on
-/wcx showafter 3
-/wcx hideafter 20
-/wcx linger 2
+/dxh options
+/dxh unlock
+/dxh lock
+/dxh center
+/dxh size 64
+/dxh thickness 3
+/dxh border 4
+/dxh shape circle
+/dxh combat on
+/dxh combat off
+/dxh timing on
+/dxh showafter 3
+/dxh hideafter 20
+/dxh linger 2
 ```
 
 `shape` supports `cross`, `dot`, `circle`, and `square`. `thickness` controls line/ring thickness, `size` controls the overall shape size, and `border` controls the black outline.
@@ -50,11 +50,11 @@ Boss phase rules require a phase source. The addon listens for DBM and BigWigs p
 Examples:
 
 ```text
-/wcx phases on
-/wcx rule lura 4
-/wcx rule lura 2,4
-/wcx delrule lura
-/wcx rules
+/dxh phases on
+/dxh rule lura 4
+/dxh rule lura 2,4
+/dxh delrule lura
+/dxh rules
 ```
 
 With phase rules enabled, the crosshair is hidden unless the active encounter name matches a configured rule and the current phase is allowed. Boss names are matched loosely, so `lura` will match an encounter name that contains `Lura`.
@@ -62,11 +62,11 @@ With phase rules enabled, the crosshair is hidden unless the active encounter na
 If a boss name match is unreliable, you can use an encounter ID rule:
 
 ```text
-/wcx rule id:1234 2,4
+/dxh rule id:1234 2,4
 ```
 
 For testing without a boss mod callback:
 
 ```text
-/wcx phase 4
+/dxh phase 4
 ```
