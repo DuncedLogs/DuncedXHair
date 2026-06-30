@@ -133,7 +133,7 @@ local function makeDynamicDropdown(parent, width, getValues, onSelect)
         local values = getValues() or {}
         if #values == 0 then
             local info = UIDropDownMenu_CreateInfo()
-            info.text = "No encounter IDs found"
+            info.text = "No current season encounters found"
             info.disabled = true
             UIDropDownMenu_AddButton(info)
             return
@@ -179,30 +179,106 @@ local function addEncounterOption(options, seen, name, encounterID, source)
     }
 end
 
-local function getJournalInstanceID()
-    local mapID
-    if C_Map and C_Map.GetBestMapForUnit then
-        local ok, value = pcall(C_Map.GetBestMapForUnit, "player")
+local function normalizeJournalInstanceResult(first, second)
+    if type(first) == "number" then
+        return first, second
+    end
+    if type(second) == "number" then
+        return second, first
+    end
+    return nil, nil
+end
+
+local function getCurrentSeasonTier()
+    if EJ_GetNumTiers and EJ_GetTierInfo then
+        local ok, tierCount = pcall(EJ_GetNumTiers)
+        if ok and tierCount then
+            for index = 1, tierCount do
+                local tierOK, tierName = pcall(EJ_GetTierInfo, index)
+                if tierOK and tierName and tostring(tierName):lower():find("current%s*season") then
+                    return index, tostring(tierName)
+                end
+            end
+        end
+    end
+
+    if EJ_GetCurrentTier then
+        local ok, tier = pcall(EJ_GetCurrentTier)
+        if ok and tier then
+            return tier, "Current Season"
+        end
+    end
+
+    return nil, "Current Season"
+end
+
+local function addInstanceEncounterOptions(options, seen, instanceID, instanceName)
+    if not instanceID or not EJ_GetEncounterInfoByIndex then
+        return
+    end
+
+    if EJ_SelectInstance then
+        pcall(EJ_SelectInstance, instanceID)
+    end
+
+    for encounterIndex = 1, 40 do
+        local ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, encounterIndex, instanceID)
+        if not ok or not name then
+            ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, encounterIndex)
+        end
+
+        if not ok or not name then
+            break
+        end
+
+        addEncounterOption(options, seen, name, encounterID, instanceName)
+    end
+end
+
+local function addCurrentSeasonRaidOptions(options, seen)
+    if not EJ_GetInstanceByIndex then
+        return
+    end
+
+    local previousTier
+    if EJ_GetCurrentTier then
+        local ok, tier = pcall(EJ_GetCurrentTier)
         if ok then
-            mapID = value
+            previousTier = tier
         end
     end
 
-    if mapID and EJ_GetInstanceForMap then
-        local ok, instanceID = pcall(EJ_GetInstanceForMap, mapID)
-        if ok and instanceID then
-            return instanceID
-        end
-    end
-
+    local previousInstance
     if EJ_GetCurrentInstance then
         local ok, instanceID = pcall(EJ_GetCurrentInstance)
-        if ok and instanceID then
-            return instanceID
+        if ok then
+            previousInstance = instanceID
         end
     end
 
-    return nil
+    local seasonTier, seasonName = getCurrentSeasonTier()
+    if seasonTier and EJ_SelectTier then
+        pcall(EJ_SelectTier, seasonTier)
+    end
+
+    for instanceIndex = 1, 30 do
+        local ok, first, second = pcall(EJ_GetInstanceByIndex, instanceIndex, true)
+        if not ok or not first then
+            break
+        end
+
+        local instanceID, instanceName = normalizeJournalInstanceResult(first, second)
+        if instanceID then
+            addInstanceEncounterOptions(options, seen, instanceID, instanceName or seasonName)
+        end
+    end
+
+    if previousInstance and EJ_SelectInstance then
+        pcall(EJ_SelectInstance, previousInstance)
+    end
+    if previousTier and seasonTier and previousTier ~= seasonTier and EJ_SelectTier then
+        pcall(EJ_SelectTier, previousTier)
+    end
 end
 
 local function getEncounterIDOptions()
@@ -215,35 +291,7 @@ local function getEncounterIDOptions()
         return options
     end
 
-    local instanceID = getJournalInstanceID()
-    local previousInstance
-    if EJ_GetCurrentInstance then
-        local ok, value = pcall(EJ_GetCurrentInstance)
-        if ok then
-            previousInstance = value
-        end
-    end
-
-    if instanceID and EJ_SelectInstance then
-        pcall(EJ_SelectInstance, instanceID)
-    end
-
-    for index = 1, 30 do
-        local ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, index, instanceID)
-        if not ok or not name then
-            ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, index)
-        end
-
-        if not ok or not name then
-            break
-        end
-
-        addEncounterOption(options, seen, name, encounterID, "Journal")
-    end
-
-    if previousInstance and instanceID and previousInstance ~= instanceID and EJ_SelectInstance then
-        pcall(EJ_SelectInstance, previousInstance)
-    end
+    addCurrentSeasonRaidOptions(options, seen)
 
     return options
 end
@@ -611,7 +659,7 @@ function WC:CreateOptionsPanel()
 
     local encounterLabel = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     encounterLabel:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -10)
-    encounterLabel:SetText("Encounter ID helper")
+    encounterLabel:SetText("Current Season encounter IDs")
 
     local encounterDropdown = makeDynamicDropdown(phaseRules, 300, getEncounterIDOptions, function(value)
         bossBox:SetText("id:" .. tostring(value))
