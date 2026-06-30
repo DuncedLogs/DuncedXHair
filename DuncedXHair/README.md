@@ -56,6 +56,8 @@ Boss phase rules require a phase source. The addon listens for DBM and BigWigs p
 
 In the options panel, turn on `Use boss phase rules` to expand the phase rule editor below it. Use `Current` during a boss encounter to fill the active boss or encounter ID, then select P1-P8 with the checkboxes and save the rule.
 
+The phase rule editor also includes an Encounter ID helper dropdown. It lists the current encounter first when available, then bosses from the current Encounter Journal instance. Picking a boss fills the rule field as `id:<encounterID>`.
+
 Examples:
 
 ```text

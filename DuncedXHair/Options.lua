@@ -7,6 +7,7 @@ end
 
 local panelName = "DuncedXHairOptionsPanel"
 local controlIndex = 0
+local phaseRuleBaseHeight = 330
 
 local function nextName(prefix)
     controlIndex = controlIndex + 1
@@ -121,10 +122,130 @@ local function makeDropdown(parent, width, values, onSelect, fontObject)
     return dropdown
 end
 
+local function makeDynamicDropdown(parent, width, getValues, onSelect)
+    local dropdown = CreateFrame("Frame", nextName("Dropdown"), parent, "UIDropDownMenuTemplate")
+    UIDropDownMenu_SetWidth(dropdown, width)
+    UIDropDownMenu_Initialize(dropdown, function(_, level)
+        if level ~= 1 then
+            return
+        end
+
+        local values = getValues() or {}
+        if #values == 0 then
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = "No encounter IDs found"
+            info.disabled = true
+            UIDropDownMenu_AddButton(info)
+            return
+        end
+
+        for _, value in ipairs(values) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = value.text
+            info.value = value.value
+            info.func = function()
+                onSelect(value.value, value)
+                UIDropDownMenu_SetText(dropdown, value.text)
+                WC:RefreshOptionsPanel()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    return dropdown
+end
+
 local function makeLocalCheck(parent, text)
     local check = CreateFrame("CheckButton", nextName("Check"), parent, "InterfaceOptionsCheckButtonTemplate")
     setControlText(check, text)
     return check
+end
+
+local function addEncounterOption(options, seen, name, encounterID, source)
+    encounterID = tonumber(encounterID)
+    if not encounterID or seen[encounterID] then
+        return
+    end
+
+    seen[encounterID] = true
+    name = WC:Trim(name or "")
+    if name == "" then
+        name = "Encounter " .. tostring(encounterID)
+    end
+
+    local prefix = source and source ~= "" and (source .. ": ") or ""
+    options[#options + 1] = {
+        text = prefix .. name .. " (id:" .. tostring(encounterID) .. ")",
+        value = encounterID,
+    }
+end
+
+local function getJournalInstanceID()
+    local mapID
+    if C_Map and C_Map.GetBestMapForUnit then
+        local ok, value = pcall(C_Map.GetBestMapForUnit, "player")
+        if ok then
+            mapID = value
+        end
+    end
+
+    if mapID and EJ_GetInstanceForMap then
+        local ok, instanceID = pcall(EJ_GetInstanceForMap, mapID)
+        if ok and instanceID then
+            return instanceID
+        end
+    end
+
+    if EJ_GetCurrentInstance then
+        local ok, instanceID = pcall(EJ_GetCurrentInstance)
+        if ok and instanceID then
+            return instanceID
+        end
+    end
+
+    return nil
+end
+
+local function getEncounterIDOptions()
+    local options = {}
+    local seen = {}
+
+    addEncounterOption(options, seen, WC.currentEncounterName or WC.currentBossModName, WC.currentEncounterID, "Current")
+
+    if not EJ_GetEncounterInfoByIndex then
+        return options
+    end
+
+    local instanceID = getJournalInstanceID()
+    local previousInstance
+    if EJ_GetCurrentInstance then
+        local ok, value = pcall(EJ_GetCurrentInstance)
+        if ok then
+            previousInstance = value
+        end
+    end
+
+    if instanceID and EJ_SelectInstance then
+        pcall(EJ_SelectInstance, instanceID)
+    end
+
+    for index = 1, 30 do
+        local ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, index, instanceID)
+        if not ok or not name then
+            ok, name, _, encounterID = pcall(EJ_GetEncounterInfoByIndex, index)
+        end
+
+        if not ok or not name then
+            break
+        end
+
+        addEncounterOption(options, seen, name, encounterID, "Journal")
+    end
+
+    if previousInstance and instanceID and previousInstance ~= instanceID and EJ_SelectInstance then
+        pcall(EJ_SelectInstance, previousInstance)
+    end
+
+    return options
 end
 
 local function getSelectedPhaseText(panel)
@@ -309,7 +430,7 @@ function WC:CreateOptionsPanel()
 
     local phaseRules = CreateFrame("Frame", nil, content)
     phaseRules:SetPoint("TOPLEFT", phaseOnly, "BOTTOMLEFT", 0, -8)
-    phaseRules:SetSize(360, 280)
+    phaseRules:SetSize(360, phaseRuleBaseHeight)
     panel.phaseRuleFrame = phaseRules
 
     local classColor = makeCheck(content, "Use class color", function(value)
@@ -488,8 +609,19 @@ function WC:CreateOptionsPanel()
         setCurrentBossInEditor(panel)
     end)
 
+    local encounterLabel = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    encounterLabel:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -10)
+    encounterLabel:SetText("Encounter ID helper")
+
+    local encounterDropdown = makeDynamicDropdown(phaseRules, 300, getEncounterIDOptions, function(value)
+        bossBox:SetText("id:" .. tostring(value))
+        bossBox:ClearFocus()
+    end)
+    encounterDropdown:SetPoint("TOPLEFT", encounterLabel, "BOTTOMLEFT", -16, -2)
+    panel.encounterIDDropdown = encounterDropdown
+
     local phaseLabel = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    phaseLabel:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -10)
+    phaseLabel:SetPoint("TOPLEFT", encounterDropdown, "BOTTOMLEFT", 16, -10)
     phaseLabel:SetText("Phases")
 
     panel.phaseChecks = {}
@@ -673,7 +805,7 @@ function WC:RefreshOptionsPanel()
     table.sort(keys)
 
     local visibleRuleCount = math.min(#keys, #(panel.ruleRows or {}))
-    local phaseRuleHeight = 280 + (visibleRuleCount * 30)
+    local phaseRuleHeight = phaseRuleBaseHeight + (visibleRuleCount * 30)
     panel.phaseRuleFrame:SetShown(db.phaseRulesEnabled)
     panel.phaseRuleFrame:SetHeight(phaseRuleHeight)
     panel.content:SetHeight(1020 + (db.phaseRulesEnabled and math.max(0, phaseRuleHeight - 218) or 0))
@@ -690,6 +822,7 @@ function WC:RefreshOptionsPanel()
     UIDropDownMenu_SetText(panel.visibilityDropdown, self.visibilityLabels[db.visibility] or db.visibility)
     UIDropDownMenu_SetSelectedValue(panel.shapeDropdown, db.shape)
     UIDropDownMenu_SetText(panel.shapeDropdown, self.shapeLabels[db.shape] or db.shape)
+    UIDropDownMenu_SetText(panel.encounterIDDropdown, "Select encounter ID")
     panel.timingCheck:SetChecked(db.combatTimingEnabled)
 
     panel.alphaSlider:SetValue(db.alpha)

@@ -15,6 +15,7 @@ Standalone World of Warcraft addon for a movable center-screen crosshair with co
   - hide after N seconds in combat
   - linger after combat ends
 - Optional boss phase rules using DBM or BigWigs phase callbacks, with P1-P8 checkbox setup in options
+- Encounter ID helper in the boss phase editor for current raid bosses
 
 ## Install
 
