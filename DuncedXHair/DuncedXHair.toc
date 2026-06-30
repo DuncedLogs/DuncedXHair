@@ -2,9 +2,8 @@
 ## Title: DuncedXHair
 ## Notes: Standalone center-screen crosshair with combat and boss phase visibility rules.
 ## Author: Wildu
-## Version: 1.1.1
+## Version: 1.1.2
 ## SavedVariables: DuncedXHairDB
-## OptionalDeps: BigWigs, BigWigs_Core, DBM-Core
 ## Category: User Interface
 
 Core.lua
