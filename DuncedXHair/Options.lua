@@ -294,11 +294,41 @@ function WC:CreateOptionsPanel()
     shape:SetPoint("TOPLEFT", shapeLabel, "BOTTOMLEFT", -16, -2)
     panel.shapeDropdown = shape
 
+    local rendererLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    rendererLabel:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -12)
+    rendererLabel:SetText("Renderer")
+
+    local rendererValues = {
+        { text = "Glyph", value = "Glyph" },
+        { text = "Geometry", value = "Geometry" },
+    }
+    local renderer = makeDropdown(panel, 140, rendererValues, function(value)
+        self.db.renderer = value
+    end)
+    renderer:SetPoint("TOPLEFT", rendererLabel, "BOTTOMLEFT", -16, -2)
+    panel.rendererDropdown = renderer
+
+    local glyphWeightLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    glyphWeightLabel:SetPoint("TOPLEFT", renderer, "BOTTOMLEFT", 16, -12)
+    glyphWeightLabel:SetText("Glyph weight")
+
+    local glyphWeightValues = {
+        { text = "Light", value = "Light" },
+        { text = "Regular", value = "Regular" },
+        { text = "Medium", value = "Medium" },
+        { text = "Bold", value = "Bold" },
+    }
+    local glyphWeight = makeDropdown(panel, 140, glyphWeightValues, function(value)
+        self.db.glyphWeight = value
+    end)
+    glyphWeight:SetPoint("TOPLEFT", glyphWeightLabel, "BOTTOMLEFT", -16, -2)
+    panel.glyphWeightDropdown = glyphWeight
+
     local timing = makeCheck(panel, "Use combat timing", function(value)
         self.db.combatTimingEnabled = value
         self:UpdateCombatTicker()
     end)
-    timing:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -14)
+    timing:SetPoint("TOPLEFT", glyphWeight, "BOTTOMLEFT", 16, -14)
     panel.timingCheck = timing
 
     local showAfter = makeSlider(panel, "Show after combat start", 0, 120, 1, function(value)
@@ -504,6 +534,12 @@ function WC:RefreshOptionsPanel()
     UIDropDownMenu_SetText(panel.visibilityDropdown, self.visibilityLabels[db.visibility] or db.visibility)
     UIDropDownMenu_SetSelectedValue(panel.shapeDropdown, db.shape)
     UIDropDownMenu_SetText(panel.shapeDropdown, self.shapeLabels[db.shape] or db.shape)
+    local renderer = self:NormalizeRenderer(db.renderer) or "Glyph"
+    UIDropDownMenu_SetSelectedValue(panel.rendererDropdown, renderer)
+    UIDropDownMenu_SetText(panel.rendererDropdown, self.rendererLabels[renderer] or renderer)
+    local glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or "Regular"
+    UIDropDownMenu_SetSelectedValue(panel.glyphWeightDropdown, glyphWeight)
+    UIDropDownMenu_SetText(panel.glyphWeightDropdown, self.glyphWeightLabels[glyphWeight] or glyphWeight)
     panel.timingCheck:SetChecked(db.combatTimingEnabled)
 
     panel.alphaSlider:SetValue(db.alpha)
@@ -518,6 +554,7 @@ function WC:RefreshOptionsPanel()
     local canFill = db.shape == "Circle" or db.shape == "Square"
     panel.fillSlider:SetEnabled(canFill)
     panel.fillSlider:SetAlpha(canFill and 1 or 0.45)
+    panel.glyphWeightDropdown:SetAlpha(renderer == "Glyph" and canFill and 1 or 0.45)
 
     local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
     local currentStage = self.currentStage or "none"

@@ -11,6 +11,8 @@ local defaults = {
     visibility = "Always",
     phaseRulesEnabled = false,
     shape = "Cross",
+    renderer = "Glyph",
+    glyphWeight = "Regular",
     alpha = 1,
     thickness = 2,
     inner_length = 30,
@@ -53,6 +55,24 @@ local shapeLabels = {
 }
 
 WC.shapeLabels = shapeLabels
+
+local rendererLabels = {
+    Geometry = "Geometry",
+    Glyph = "Glyph",
+}
+
+WC.rendererLabels = rendererLabels
+
+local glyphWeightLabels = {
+    Light = "Light",
+    Regular = "Regular",
+    Medium = "Medium",
+    Bold = "Bold",
+}
+
+WC.glyphWeightLabels = glyphWeightLabels
+
+local glyphFont = "Fonts\\ARIALN.TTF"
 
 local function copyDefaults(source, target)
     for key, value in pairs(source) do
@@ -334,6 +354,8 @@ function WC:CreateCrosshair()
     self.allLines = {}
     self.rectPools = {}
     self.allRects = {}
+    self.glyphPools = {}
+    self.allGlyphs = {}
 
     local function makeBar(name)
         local bar = CreateFrame("Frame", name, frame)
@@ -367,6 +389,30 @@ function WC:NormalizeShape(value)
     return nil
 end
 
+function WC:NormalizeRenderer(value)
+    value = trim(value):lower():gsub("[%s_%-]+", "")
+    if value == "geometry" or value == "line" or value == "lines" or value == "bar" or value == "bars" then
+        return "Geometry"
+    elseif value == "glyph" or value == "font" or value == "unicode" or value == "text" then
+        return "Glyph"
+    end
+    return nil
+end
+
+function WC:NormalizeGlyphWeight(value)
+    value = trim(value):lower():gsub("[%s_%-]+", "")
+    if value == "light" or value == "thin" then
+        return "Light"
+    elseif value == "regular" or value == "normal" then
+        return "Regular"
+    elseif value == "medium" then
+        return "Medium"
+    elseif value == "bold" or value == "heavy" or value == "thick" then
+        return "Bold"
+    end
+    return nil
+end
+
 function WC:GetDrawColor()
     if self.db.class_colored then
         return getClassColor()
@@ -383,6 +429,9 @@ function WC:HideShapeElements()
     end
     for _, line in ipairs(self.allLines or {}) do
         line:Hide()
+    end
+    for _, glyph in ipairs(self.allGlyphs or {}) do
+        glyph:Hide()
     end
 end
 
@@ -450,6 +499,95 @@ function WC:SetRect(poolName, index, width, height, x, y, r, g, b, a, subLevel)
     rect.tex:SetDrawLayer("BACKGROUND", subLevel or 0)
     rect.tex:SetColorTexture(r, g, b, a or 1)
     rect:Show()
+end
+
+function WC:GetGlyph(poolName, index)
+    if not self.frame or not self.frame.CreateFontString then
+        return nil
+    end
+
+    self.glyphPools[poolName] = self.glyphPools[poolName] or {}
+    local pool = self.glyphPools[poolName]
+    if not pool[index] then
+        local glyph = self.frame:CreateFontString(nil, "BACKGROUND")
+        glyph:SetJustifyH("CENTER")
+        glyph:SetJustifyV("MIDDLE")
+        pool[index] = glyph
+        self.allGlyphs[#self.allGlyphs + 1] = glyph
+    end
+    return pool[index]
+end
+
+function WC:GetGlyphOffsets(weight, fontSize)
+    local offset = math.max(1, math.floor((tonumber(fontSize) or 0) / 96))
+    if weight == "Medium" then
+        return {
+            { 0, 0 },
+            { offset, 0 },
+            { -offset, 0 },
+            { 0, offset },
+            { 0, -offset },
+        }
+    elseif weight == "Bold" then
+        return {
+            { 0, 0 },
+            { offset, 0 },
+            { -offset, 0 },
+            { 0, offset },
+            { 0, -offset },
+            { offset, offset },
+            { offset, -offset },
+            { -offset, offset },
+            { -offset, -offset },
+        }
+    end
+
+    return { { 0, 0 } }
+end
+
+function WC:SetGlyph(poolName, index, text, fontSize, x, y, r, g, b, a, subLevel)
+    local glyph = self:GetGlyph(poolName, index)
+    if not glyph then
+        return false
+    end
+
+    local ok = glyph:SetFont(glyphFont, fontSize, "")
+    if not ok and STANDARD_TEXT_FONT then
+        ok = glyph:SetFont(STANDARD_TEXT_FONT, fontSize, "")
+    end
+    if not ok then
+        return false
+    end
+
+    if glyph.SetDrawLayer then
+        glyph:SetDrawLayer("BACKGROUND", subLevel or 0)
+    end
+    glyph:ClearAllPoints()
+    glyph:SetSize(fontSize * 1.5, fontSize * 1.5)
+    glyph:SetPoint("CENTER", self.frame, "CENTER", x or 0, y or 0)
+    glyph:SetText(text)
+    glyph:SetTextColor(r, g, b, a or 1)
+    glyph:Show()
+    return true
+end
+
+function WC:DrawGlyphStack(poolName, text, fontSize, weight, r, g, b, a, subLevel)
+    if not text or (a or 1) <= 0 then
+        return true
+    end
+
+    if weight == "Light" then
+        fontSize = fontSize - math.max(1, math.floor(fontSize / 64))
+    end
+    fontSize = math.max(4, round(fontSize))
+
+    local offsets = self:GetGlyphOffsets(weight, fontSize)
+    for index, offset in ipairs(offsets) do
+        if not self:SetGlyph(poolName, index, text, fontSize, offset[1], offset[2], r, g, b, a, subLevel) then
+            return false
+        end
+    end
+    return true
 end
 
 function WC:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
@@ -571,6 +709,44 @@ function WC:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
     self:DrawSquareBand("squareFill", half, holeHalf, r, g, b, 1, 1)
 end
 
+function WC:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b)
+    local symbols
+    if shape == "Circle" then
+        symbols = { outline = "○", filled = "●" }
+    elseif shape == "Square" then
+        symbols = { outline = "□", filled = "■" }
+    else
+        return false
+    end
+
+    fill = clamp(fill, 0, 1)
+    local weight = self:NormalizeGlyphWeight(self.db.glyphWeight) or defaults.glyphWeight
+    local fontSize = math.max(4, innerLength)
+    local borderFontSize = fontSize + (borderSize * 2)
+    local frameSize = borderFontSize + 16
+    local ok = true
+
+    self.frame:SetSize(frameSize, frameSize)
+
+    if borderSize > 0 then
+        if fill > 0 then
+            ok = self:DrawGlyphStack("glyphBorderFill", symbols.filled, borderFontSize, weight, 0, 0, 0, fill, 0) and ok
+        end
+        if fill < 1 then
+            ok = self:DrawGlyphStack("glyphBorderOutline", symbols.outline, borderFontSize, weight, 0, 0, 0, 1, 1) and ok
+        end
+    end
+
+    if fill > 0 then
+        ok = self:DrawGlyphStack("glyphColorFill", symbols.filled, fontSize, weight, r, g, b, fill, 2) and ok
+    end
+    if fill < 1 then
+        ok = self:DrawGlyphStack("glyphColorOutline", symbols.outline, fontSize, weight, r, g, b, 1, 3) and ok
+    end
+
+    return ok
+end
+
 function WC:ApplyShape()
     if not self.frame or not self.db then
         return
@@ -583,6 +759,8 @@ function WC:ApplyShape()
     db.border_size = round(clamp(db.border_size, 0, 64))
     db.fill = clamp(db.fill, 0, 1)
     db.shape = self:NormalizeShape(db.shape) or "Cross"
+    db.renderer = self:NormalizeRenderer(db.renderer) or defaults.renderer
+    db.glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or defaults.glyphWeight
 
     local thickness = db.thickness
     local innerLength = db.inner_length
@@ -594,9 +772,26 @@ function WC:ApplyShape()
     self.frame:SetAlpha(db.alpha)
     self:HideShapeElements()
 
-    if shape == "Circle" and self.frame.CreateLine then
-        self:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
+    if shape == "Circle" then
+        if db.renderer == "Glyph" then
+            if self:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b) then
+                return
+            end
+            self:HideShapeElements()
+        end
+        if self.frame.CreateLine then
+            self:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
+        else
+            db.shape = "Cross"
+            self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+        end
     elseif shape == "Square" then
+        if db.renderer == "Glyph" then
+            if self:ApplyGlyphShape(shape, innerLength, borderSize, fill, r, g, b) then
+                return
+            end
+            self:HideShapeElements()
+        end
         self:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
     else
         db.shape = "Cross"
@@ -931,6 +1126,8 @@ function WC:PrintStatus()
     self:Print("enabled=" .. tostring(db.enabled) ..
         ", locked=" .. tostring(db.locked) ..
         ", shape=" .. tostring(shapeLabels[db.shape] or db.shape) ..
+        ", renderer=" .. tostring(rendererLabels[db.renderer] or db.renderer) ..
+        ", glyphWeight=" .. tostring(glyphWeightLabels[db.glyphWeight] or db.glyphWeight) ..
         ", fill=" .. string.format("%.0f", (db.fill or 0) * 100) .. "%" ..
         ", visibility=" .. tostring(visibilityLabels[db.visibility] or db.visibility) ..
         ", combatTiming=" .. tostring(db.combatTimingEnabled) ..
@@ -948,6 +1145,7 @@ function WC:PrintHelp()
     self:Print("/dxh lock, unlock, center, on, off")
     self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3, fill 100")
     self:Print("/dxh shape cross|circle|square. /dxh shape dot selects circle fill 100")
+    self:Print("/dxh renderer glyph|geometry, weight light|regular|medium|bold")
     self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
     self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
     self:Print("/dxh phases on|off - show only during configured boss phases")
@@ -1033,6 +1231,24 @@ function WC:HandleSlash(message)
             end
             self:ApplySettings()
             self:Print("Shape set to " .. shapeLabels[shape] .. ".")
+        end
+    elseif command == "renderer" or command == "render" then
+        local renderer = self:NormalizeRenderer(rest)
+        if not renderer then
+            self:Print("Renderer values: glyph, geometry.")
+        else
+            self.db.renderer = renderer
+            self:ApplySettings()
+            self:Print("Renderer set to " .. rendererLabels[renderer] .. ".")
+        end
+    elseif command == "weight" or command == "glyphweight" or command == "fontweight" then
+        local weight = self:NormalizeGlyphWeight(rest)
+        if not weight then
+            self:Print("Weight values: light, regular, medium, bold.")
+        else
+            self.db.glyphWeight = weight
+            self:ApplySettings()
+            self:Print("Glyph weight set to " .. glyphWeightLabels[weight] .. ".")
         end
     elseif command == "horizontal" or command == "lockhorizontal" then
         local enabled = parseBoolean(rest)
