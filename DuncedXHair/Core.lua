@@ -529,16 +529,39 @@ function WC:DrawCircleBand(poolName, radius, holeRadius, r, g, b, a, subLevel)
     end
 end
 
+function WC:DrawCircleOutline(poolName, radius, lineThickness, r, g, b, a, subLevel)
+    if not self.frame or not self.frame.CreateLine or radius <= 0 then
+        return
+    end
+
+    local segments = math.min(256, math.max(96, math.ceil(radius * 5)))
+    for index = 1, segments do
+        local angle1 = ((index - 1) / segments) * math.pi * 2
+        local angle2 = (index / segments) * math.pi * 2
+        local x1 = math.cos(angle1) * radius
+        local y1 = math.sin(angle1) * radius
+        local x2 = math.cos(angle2) * radius
+        local y2 = math.sin(angle2) * radius
+        self:SetLine(poolName, index, x1, y1, x2, y2, lineThickness, r, g, b, a, subLevel)
+    end
+end
+
 function WC:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
     local radius = innerLength / 2
     local outerRadius = radius + borderSize
     local holeRadius = self:GetFillHoleRadius(radius, thickness, fill)
     local borderHoleRadius = math.max(0, holeRadius - borderSize)
-    local frameSize = (outerRadius * 2) + 4
+    local outlineThickness = math.max(1, thickness + (borderSize * 2))
+    local frameSize = math.max((outerRadius * 2) + 4, innerLength + outlineThickness + 4)
 
     self.frame:SetSize(frameSize, frameSize)
-    self:DrawCircleBand("circleBorder", outerRadius, borderHoleRadius, 0, 0, 0, 1, 0)
-    self:DrawCircleBand("circleFill", radius, holeRadius, r, g, b, 1, 1)
+    if fill <= 0 then
+        self:DrawCircleOutline("circleBorder", radius, outlineThickness, 0, 0, 0, 1, 0)
+        self:DrawCircleOutline("circleFill", radius, thickness, r, g, b, 1, 1)
+    else
+        self:DrawCircleBand("circleBorder", outerRadius, borderHoleRadius, 0, 0, 0, 1, 0)
+        self:DrawCircleBand("circleFill", radius, holeRadius, r, g, b, 1, 1)
+    end
 end
 
 function WC:DrawSquareBand(poolName, outerHalf, holeHalf, r, g, b, a, subLevel)
