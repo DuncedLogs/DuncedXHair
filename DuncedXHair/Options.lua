@@ -238,11 +238,27 @@ function WC:CreateOptionsPanel()
     panel.name = "DuncedXHair"
     self.optionsPanel = panel
 
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    local scroll = CreateFrame("ScrollFrame", nextName("Scroll"), panel, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -4)
+    scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 4)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(frame, delta)
+        local current = frame:GetVerticalScroll()
+        local maximum = frame:GetVerticalScrollRange()
+        frame:SetVerticalScroll(math.max(0, math.min(maximum, current - (delta * 40))))
+    end)
+    panel.scrollFrame = scroll
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(640, 940)
+    scroll:SetScrollChild(content)
+    panel.content = content
+
+    local title = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("DuncedXHair")
 
-    local lockButton = makeButton(panel, "Unlock", 96)
+    local lockButton = makeButton(content, "Unlock", 96)
     lockButton:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -18)
     lockButton:SetScript("OnClick", function()
         self:SetLocked(not self.db.locked)
@@ -250,53 +266,58 @@ function WC:CreateOptionsPanel()
     end)
     panel.lockButton = lockButton
 
-    local centerButton = makeButton(panel, "Center", 96)
+    local centerButton = makeButton(content, "Center", 96)
     centerButton:SetPoint("LEFT", lockButton, "RIGHT", 8, 0)
     centerButton:SetScript("OnClick", function()
         self:Center()
         self:RefreshOptionsPanel()
     end)
 
-    local enabled = makeCheck(panel, "Enabled", function(value)
+    local enabled = makeCheck(content, "Enabled", function(value)
         self.db.enabled = value
     end)
     enabled:SetPoint("TOPLEFT", lockButton, "BOTTOMLEFT", 0, -18)
     panel.enabledCheck = enabled
 
-    local preview = makeCheck(panel, "Show while unlocked", function(value)
+    local preview = makeCheck(content, "Show while unlocked", function(value)
         self.db.showWhileUnlocked = value
     end)
     preview:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -8)
     panel.previewCheck = preview
 
-    local horizontal = makeCheck(panel, "Lock horizontal position", function(value)
+    local horizontal = makeCheck(content, "Lock horizontal position", function(value)
         self.db.lockHorizontal = value
         self:SavePosition()
     end)
     horizontal:SetPoint("TOPLEFT", preview, "BOTTOMLEFT", 0, -8)
     panel.horizontalCheck = horizontal
 
-    local phaseOnly = makeCheck(panel, "Use boss phase rules", function(value)
+    local phaseOnly = makeCheck(content, "Use boss phase rules", function(value)
         self.db.phaseRulesEnabled = value
     end)
     phaseOnly:SetPoint("TOPLEFT", horizontal, "BOTTOMLEFT", 0, -8)
     panel.phaseCheck = phaseOnly
 
-    local classColor = makeCheck(panel, "Use class color", function(value)
+    local phaseRules = CreateFrame("Frame", nil, content)
+    phaseRules:SetPoint("TOPLEFT", phaseOnly, "BOTTOMLEFT", 0, -8)
+    phaseRules:SetSize(360, 218)
+    panel.phaseRuleFrame = phaseRules
+
+    local classColor = makeCheck(content, "Use class color", function(value)
         self.db.class_colored = value
         self:UpdateColor()
     end)
     classColor:SetPoint("TOPLEFT", phaseOnly, "BOTTOMLEFT", 0, -8)
     panel.classColorCheck = classColor
 
-    local colorButton = makeButton(panel, "Custom Color", 116)
+    local colorButton = makeButton(content, "Custom Color", 116)
     colorButton:SetPoint("LEFT", classColor, "RIGHT", 160, 0)
     colorButton:SetScript("OnClick", function()
         openColorPicker(classColor)
     end)
     panel.colorButton = colorButton
 
-    local colorSwatch = CreateFrame("Button", nextName("ColorSwatch"), panel)
+    local colorSwatch = CreateFrame("Button", nextName("ColorSwatch"), content)
     colorSwatch:SetSize(24, 24)
     colorSwatch:SetPoint("LEFT", colorButton, "RIGHT", 8, 0)
     colorSwatch.bg = colorSwatch:CreateTexture(nil, "BACKGROUND")
@@ -310,7 +331,7 @@ function WC:CreateOptionsPanel()
     end)
     panel.colorSwatch = colorSwatch
 
-    local visibilityLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local visibilityLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     visibilityLabel:SetPoint("TOPLEFT", classColor, "BOTTOMLEFT", 0, -16)
     visibilityLabel:SetText("Visibility")
 
@@ -321,13 +342,13 @@ function WC:CreateOptionsPanel()
         { text = "In Combat + In Instance", value = "CombatAndInstance" },
         { text = "In Combat or In Instance", value = "CombatOrInstance" },
     }
-    local visibility = makeDropdown(panel, 190, visibilityValues, function(value)
+    local visibility = makeDropdown(content, 190, visibilityValues, function(value)
         self.db.visibility = value
     end)
     visibility:SetPoint("TOPLEFT", visibilityLabel, "BOTTOMLEFT", -16, -2)
     panel.visibilityDropdown = visibility
 
-    local shapeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local shapeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     shapeLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 360, -18)
     shapeLabel:SetText("Shape")
 
@@ -337,24 +358,24 @@ function WC:CreateOptionsPanel()
         { text = "Square", value = "Square" },
         { text = "Unicode", value = "Unicode" },
     }
-    local shape = makeDropdown(panel, 140, shapeValues, function(value)
+    local shape = makeDropdown(content, 140, shapeValues, function(value)
         self.db.shape = value
     end)
     shape:SetPoint("TOPLEFT", shapeLabel, "BOTTOMLEFT", -16, -2)
     panel.shapeDropdown = shape
 
-    local symbolLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local symbolLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     symbolLabel:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -12)
     symbolLabel:SetText("Unicode symbol")
 
-    local symbol = makeDropdown(panel, 140, self.unicodeSymbolValues, function(value)
+    local symbol = makeDropdown(content, 140, self.unicodeSymbolValues, function(value)
         self.db.shape = "Unicode"
         self.db.unicodeSymbol = value
     end)
     symbol:SetPoint("TOPLEFT", symbolLabel, "BOTTOMLEFT", -16, -2)
     panel.unicodeSymbolDropdown = symbol
 
-    local glyphWeightLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local glyphWeightLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     glyphWeightLabel:SetPoint("TOPLEFT", symbol, "BOTTOMLEFT", 16, -12)
     glyphWeightLabel:SetText("Unicode weight")
 
@@ -364,20 +385,20 @@ function WC:CreateOptionsPanel()
         { text = "Medium", value = "Medium" },
         { text = "Bold", value = "Bold" },
     }
-    local glyphWeight = makeDropdown(panel, 140, glyphWeightValues, function(value)
+    local glyphWeight = makeDropdown(content, 140, glyphWeightValues, function(value)
         self.db.glyphWeight = value
     end)
     glyphWeight:SetPoint("TOPLEFT", glyphWeightLabel, "BOTTOMLEFT", -16, -2)
     panel.glyphWeightDropdown = glyphWeight
 
-    local timing = makeCheck(panel, "Use combat timing", function(value)
+    local timing = makeCheck(content, "Use combat timing", function(value)
         self.db.combatTimingEnabled = value
         self:UpdateCombatTicker()
     end)
     timing:SetPoint("TOPLEFT", glyphWeight, "BOTTOMLEFT", 16, -14)
     panel.timingCheck = timing
 
-    local showAfter = makeSlider(panel, "Show after combat start", 0, 120, 1, function(value)
+    local showAfter = makeSlider(content, "Show after combat start", 0, 120, 1, function(value)
         self.db.combatShowAfter = value
         self.db.combatTimingEnabled = true
         self:UpdateCombatTicker()
@@ -386,7 +407,7 @@ function WC:CreateOptionsPanel()
     showAfter:SetWidth(190)
     panel.showAfterSlider = showAfter
 
-    local hideAfter = makeSlider(panel, "Hide after combat time", 0, 600, 1, function(value)
+    local hideAfter = makeSlider(content, "Hide after combat time", 0, 600, 1, function(value)
         self.db.combatHideAfter = value
         self.db.combatTimingEnabled = true
         self:UpdateCombatTicker()
@@ -395,7 +416,7 @@ function WC:CreateOptionsPanel()
     hideAfter:SetWidth(190)
     panel.hideAfterSlider = hideAfter
 
-    local linger = makeSlider(panel, "Linger after combat", 0, 120, 1, function(value)
+    local linger = makeSlider(content, "Linger after combat", 0, 120, 1, function(value)
         self.db.combatEndDelay = value
         self.db.combatTimingEnabled = true
         self:UpdateCombatTicker()
@@ -404,66 +425,66 @@ function WC:CreateOptionsPanel()
     linger:SetWidth(190)
     panel.lingerSlider = linger
 
-    local alpha = makeSlider(panel, "Alpha", 0, 1, 0.01, function(value)
+    local alpha = makeSlider(content, "Alpha", 0, 1, 0.01, function(value)
         self.db.alpha = value
     end)
     alpha:SetPoint("TOPLEFT", visibility, "BOTTOMLEFT", 20, -30)
     alpha:SetWidth(220)
     panel.alphaSlider = alpha
 
-    local thickness = makeSlider(panel, "Thickness", 1, 32, 1, function(value)
+    local thickness = makeSlider(content, "Thickness", 1, 32, 1, function(value)
         self.db.thickness = value
     end)
     thickness:SetPoint("TOPLEFT", alpha, "BOTTOMLEFT", 0, -38)
     thickness:SetWidth(220)
     panel.thicknessSlider = thickness
 
-    local innerLength = makeSlider(panel, "Inner length", 4, 256, 1, function(value)
+    local innerLength = makeSlider(content, "Inner length", 4, 256, 1, function(value)
         self.db.inner_length = value
     end)
     innerLength:SetPoint("TOPLEFT", thickness, "BOTTOMLEFT", 0, -38)
     innerLength:SetWidth(220)
     panel.innerLengthSlider = innerLength
 
-    local border = makeSlider(panel, "Border size", 0, 64, 1, function(value)
+    local border = makeSlider(content, "Border size", 0, 64, 1, function(value)
         self.db.border_size = value
     end)
     border:SetPoint("TOPLEFT", innerLength, "BOTTOMLEFT", 0, -38)
     border:SetWidth(220)
     panel.borderSlider = border
 
-    local fill = makeSlider(panel, "Fill amount", 0, 1, 0.01, function(value)
+    local fill = makeSlider(content, "Fill amount", 0, 1, 0.01, function(value)
         self.db.fill = value
     end)
     fill:SetPoint("TOPLEFT", border, "BOTTOMLEFT", 0, -38)
     fill:SetWidth(220)
     panel.fillSlider = fill
 
-    local ruleTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    ruleTitle:SetPoint("TOPLEFT", fill, "BOTTOMLEFT", -4, -34)
+    local ruleTitle = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    ruleTitle:SetPoint("TOPLEFT", phaseRules, "TOPLEFT", 0, -2)
     ruleTitle:SetText("Boss phase rules")
 
-    local bossLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local bossLabel = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     bossLabel:SetPoint("TOPLEFT", ruleTitle, "BOTTOMLEFT", 0, -12)
     bossLabel:SetText("Boss or id:encounterID")
 
-    local bossBox = makeEditBox(panel, 220)
+    local bossBox = makeEditBox(phaseRules, 220)
     bossBox:SetPoint("TOPLEFT", bossLabel, "BOTTOMLEFT", 4, -4)
     panel.bossBox = bossBox
 
-    local currentBoss = makeButton(panel, "Current", 82)
+    local currentBoss = makeButton(phaseRules, "Current", 82)
     currentBoss:SetPoint("LEFT", bossBox, "RIGHT", 10, 0)
     currentBoss:SetScript("OnClick", function()
         setCurrentBossInEditor(panel)
     end)
 
-    local phaseLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local phaseLabel = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     phaseLabel:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -10)
     phaseLabel:SetText("Phases")
 
     panel.phaseChecks = {}
     for index = 1, 8 do
-        local check = makeLocalCheck(panel, "P" .. index)
+        local check = makeLocalCheck(phaseRules, "P" .. index)
         check.phaseValue = tostring(index)
         if index == 1 then
             check:SetPoint("TOPLEFT", phaseLabel, "BOTTOMLEFT", -4, -4)
@@ -475,7 +496,7 @@ function WC:CreateOptionsPanel()
         panel.phaseChecks[index] = check
     end
 
-    local saveRule = makeButton(panel, "Save", 80)
+    local saveRule = makeButton(phaseRules, "Save", 80)
     saveRule:SetPoint("TOPLEFT", panel.phaseChecks[5], "BOTTOMLEFT", 4, -8)
     saveRule:SetScript("OnClick", function()
         local ok, message = self:SetRule(bossBox:GetText(), getSelectedPhaseText(panel))
@@ -486,7 +507,7 @@ function WC:CreateOptionsPanel()
         self:RefreshOptionsPanel()
     end)
 
-    local deleteRule = makeButton(panel, "Delete", 80)
+    local deleteRule = makeButton(phaseRules, "Delete", 80)
     deleteRule:SetPoint("LEFT", saveRule, "RIGHT", 8, 0)
     deleteRule:SetScript("OnClick", function()
         local ok, message = self:DeleteRule(bossBox:GetText())
@@ -496,7 +517,7 @@ function WC:CreateOptionsPanel()
         self:RefreshOptionsPanel()
     end)
 
-    local clearRule = makeButton(panel, "Clear", 80)
+    local clearRule = makeButton(phaseRules, "Clear", 80)
     clearRule:SetPoint("LEFT", deleteRule, "RIGHT", 8, 0)
     clearRule:SetScript("OnClick", function()
         panel.loadedRuleKey = nil
@@ -509,26 +530,26 @@ function WC:CreateOptionsPanel()
         saveRule:Click()
     end)
 
-    local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local status = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", saveRule, "BOTTOMLEFT", -4, -14)
     status:SetText("")
-    status:SetWidth(500)
+    status:SetWidth(350)
     status:SetJustifyH("LEFT")
     panel.statusText = status
 
     panel.ruleRows = {}
     for index = 1, 6 do
         local row = {}
-        row.text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        row.text = phaseRules:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         if index == 1 then
             row.text:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -10)
         else
             row.text:SetPoint("TOPLEFT", panel.ruleRows[index - 1].text, "BOTTOMLEFT", 0, -8)
         end
-        row.text:SetWidth(280)
+        row.text:SetWidth(200)
         row.text:SetJustifyH("LEFT")
 
-        row.editButton = makeButton(panel, "Edit", 58)
+        row.editButton = makeButton(phaseRules, "Edit", 58)
         row.editButton:SetPoint("LEFT", row.text, "RIGHT", 8, 0)
         row.editButton:SetScript("OnClick", function(button)
             if button.ruleKey then
@@ -536,7 +557,7 @@ function WC:CreateOptionsPanel()
             end
         end)
 
-        row.deleteButton = makeButton(panel, "Delete", 70)
+        row.deleteButton = makeButton(phaseRules, "Delete", 70)
         row.deleteButton:SetPoint("LEFT", row.editButton, "RIGHT", 6, 0)
         row.deleteButton:SetScript("OnClick", function(button)
             if button.ruleKey then
@@ -634,6 +655,13 @@ function WC:RefreshOptionsPanel()
     panel.previewCheck:SetChecked(db.showWhileUnlocked)
     panel.horizontalCheck:SetChecked(db.lockHorizontal)
     panel.phaseCheck:SetChecked(db.phaseRulesEnabled)
+    panel.phaseRuleFrame:SetShown(db.phaseRulesEnabled)
+    panel.classColorCheck:ClearAllPoints()
+    if db.phaseRulesEnabled then
+        panel.classColorCheck:SetPoint("TOPLEFT", panel.phaseRuleFrame, "BOTTOMLEFT", 0, -8)
+    else
+        panel.classColorCheck:SetPoint("TOPLEFT", panel.phaseCheck, "BOTTOMLEFT", 0, -8)
+    end
     panel.classColorCheck:SetChecked(db.class_colored)
     panel.colorButton:SetText(db.class_colored and "Custom Color" or "Edit Color")
     panel.colorSwatch.tex:SetColorTexture(db.customR or 1, db.customG or 1, db.customB or 1, 1)

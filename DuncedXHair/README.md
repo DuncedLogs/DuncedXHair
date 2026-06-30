@@ -56,7 +56,7 @@ Combat timing:
 
 Boss phase rules require a phase source. The addon listens for DBM and BigWigs phase callbacks when either boss mod is loaded. It also uses Blizzard encounter start/end events to know which boss is active.
 
-In the options panel, use `Current` during a boss encounter to fill the active boss or encounter ID, then select P1-P8 with the checkboxes and save the rule.
+In the options panel, turn on `Use boss phase rules` to expand the phase rule editor below it. Use `Current` during a boss encounter to fill the active boss or encounter ID, then select P1-P8 with the checkboxes and save the rule.
 
 Examples:
 
