@@ -112,6 +112,54 @@ local function makeDropdown(parent, width, values, onSelect)
     return dropdown
 end
 
+local function makeLocalCheck(parent, text)
+    local check = CreateFrame("CheckButton", nextName("Check"), parent, "InterfaceOptionsCheckButtonTemplate")
+    setControlText(check, text)
+    return check
+end
+
+local function getSelectedPhaseText(panel)
+    local phases = {}
+    for _, check in ipairs(panel.phaseChecks or {}) do
+        if check:GetChecked() then
+            phases[#phases + 1] = check.phaseValue
+        end
+    end
+    return table.concat(phases, ",")
+end
+
+local function setSelectedPhases(panel, phases)
+    for _, check in ipairs(panel.phaseChecks or {}) do
+        check:SetChecked(phases and phases[check.phaseValue] == true)
+    end
+end
+
+local function loadRuleEditor(panel, key)
+    local rule = WC.db and WC.db.rules and WC.db.rules[key]
+    if not rule then
+        return
+    end
+    panel.loadedRuleKey = key
+    panel.bossBox:SetText(rule.label or key)
+    setSelectedPhases(panel, rule.phases)
+end
+
+local function setCurrentBossInEditor(panel)
+    local boss = WC.currentEncounterName or WC.currentBossModName or WC.manualBossName
+    if boss and boss ~= "" then
+        panel.bossBox:SetText(boss)
+    elseif WC.currentEncounterID then
+        panel.bossBox:SetText("id:" .. tostring(WC.currentEncounterID))
+    else
+        panel.bossBox:SetText("")
+    end
+
+    local stage = WC:NormalizeStage(WC.currentStage or "")
+    if stage then
+        setSelectedPhases(panel, { [stage] = true })
+    end
+end
+
 local function openColorPicker(owner)
     local db = WC.db
     if not db or not ColorPickerFrame then
@@ -403,23 +451,38 @@ function WC:CreateOptionsPanel()
     bossBox:SetPoint("TOPLEFT", bossLabel, "BOTTOMLEFT", 4, -4)
     panel.bossBox = bossBox
 
+    local currentBoss = makeButton(panel, "Current", 82)
+    currentBoss:SetPoint("LEFT", bossBox, "RIGHT", 10, 0)
+    currentBoss:SetScript("OnClick", function()
+        setCurrentBossInEditor(panel)
+    end)
+
     local phaseLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    phaseLabel:SetPoint("LEFT", bossLabel, "RIGHT", 152, 0)
+    phaseLabel:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -10)
     phaseLabel:SetText("Phases")
 
-    local phaseBox = makeEditBox(panel, 120)
-    phaseBox:SetPoint("TOPLEFT", phaseLabel, "BOTTOMLEFT", 4, -4)
-    panel.phaseBox = phaseBox
+    panel.phaseChecks = {}
+    for index = 1, 8 do
+        local check = makeLocalCheck(panel, "P" .. index)
+        check.phaseValue = tostring(index)
+        if index == 1 then
+            check:SetPoint("TOPLEFT", phaseLabel, "BOTTOMLEFT", -4, -4)
+        elseif index == 5 then
+            check:SetPoint("TOPLEFT", panel.phaseChecks[1], "BOTTOMLEFT", 0, -2)
+        else
+            check:SetPoint("LEFT", panel.phaseChecks[index - 1], "RIGHT", 36, 0)
+        end
+        panel.phaseChecks[index] = check
+    end
 
     local saveRule = makeButton(panel, "Save", 80)
-    saveRule:SetPoint("LEFT", phaseBox, "RIGHT", 10, 0)
+    saveRule:SetPoint("TOPLEFT", panel.phaseChecks[5], "BOTTOMLEFT", 4, -8)
     saveRule:SetScript("OnClick", function()
-        local ok, message = self:SetRule(bossBox:GetText(), phaseBox:GetText())
+        local ok, message = self:SetRule(bossBox:GetText(), getSelectedPhaseText(panel))
         if not ok then
             self:Print(message)
         end
         bossBox:ClearFocus()
-        phaseBox:ClearFocus()
         self:RefreshOptionsPanel()
     end)
 
@@ -433,20 +496,28 @@ function WC:CreateOptionsPanel()
         self:RefreshOptionsPanel()
     end)
 
-    bossBox:SetScript("OnEnterPressed", function()
-        saveRule:Click()
+    local clearRule = makeButton(panel, "Clear", 80)
+    clearRule:SetPoint("LEFT", deleteRule, "RIGHT", 8, 0)
+    clearRule:SetScript("OnClick", function()
+        panel.loadedRuleKey = nil
+        bossBox:SetText("")
+        setSelectedPhases(panel, nil)
+        bossBox:ClearFocus()
     end)
-    phaseBox:SetScript("OnEnterPressed", function()
+
+    bossBox:SetScript("OnEnterPressed", function()
         saveRule:Click()
     end)
 
     local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", bossBox, "BOTTOMLEFT", -4, -16)
+    status:SetPoint("TOPLEFT", saveRule, "BOTTOMLEFT", -4, -14)
     status:SetText("")
+    status:SetWidth(500)
+    status:SetJustifyH("LEFT")
     panel.statusText = status
 
     panel.ruleRows = {}
-    for index = 1, 8 do
+    for index = 1, 6 do
         local row = {}
         row.text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         if index == 1 then
@@ -454,12 +525,20 @@ function WC:CreateOptionsPanel()
         else
             row.text:SetPoint("TOPLEFT", panel.ruleRows[index - 1].text, "BOTTOMLEFT", 0, -8)
         end
-        row.text:SetWidth(330)
+        row.text:SetWidth(280)
         row.text:SetJustifyH("LEFT")
 
-        row.button = makeButton(panel, "Delete", 70)
-        row.button:SetPoint("LEFT", row.text, "RIGHT", 8, 0)
-        row.button:SetScript("OnClick", function(button)
+        row.editButton = makeButton(panel, "Edit", 58)
+        row.editButton:SetPoint("LEFT", row.text, "RIGHT", 8, 0)
+        row.editButton:SetScript("OnClick", function(button)
+            if button.ruleKey then
+                loadRuleEditor(panel, button.ruleKey)
+            end
+        end)
+
+        row.deleteButton = makeButton(panel, "Delete", 70)
+        row.deleteButton:SetPoint("LEFT", row.editButton, "RIGHT", 6, 0)
+        row.deleteButton:SetScript("OnClick", function(button)
             if button.ruleKey then
                 self.db.rules[button.ruleKey] = nil
                 self:RefreshVisibility()
@@ -511,6 +590,36 @@ function WC:OpenOptions()
     end
 end
 
+function WC:RefreshPhaseRuleStatus()
+    local panel = self.optionsPanel
+    local db = self.db
+    if not panel or not db or not panel.statusText then
+        return
+    end
+
+    local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
+    local currentStage = self.currentStage or "none"
+    local matchingRule = self:GetMatchingRule()
+    local baseAllowed = self:PassesBaseVisibility() and self:PassesCombatTiming()
+    local phaseAllowed = self:PassesPhaseRules()
+    local ruleStatus
+    if not db.phaseRulesEnabled then
+        ruleStatus = "Phase rules off"
+    elseif not next(db.rules or {}) then
+        ruleStatus = "No rules"
+    elseif matchingRule then
+        ruleStatus = "Rule " .. self:FormatPhaseList(matchingRule.phases) .. (phaseAllowed and " allows" or " hides")
+    else
+        ruleStatus = "No matching rule"
+    end
+
+    panel.statusText:SetText(
+        "Current: " .. tostring(currentBoss) .. " P" .. tostring(currentStage) ..
+        "  Base: " .. (baseAllowed and "allows" or "hides") ..
+        "  " .. ruleStatus
+    )
+end
+
 function WC:RefreshOptionsPanel()
     local panel = self.optionsPanel
     local db = self.db
@@ -556,9 +665,7 @@ function WC:RefreshOptionsPanel()
     panel.unicodeSymbolDropdown:SetAlpha(isUnicode and 1 or 0.45)
     panel.glyphWeightDropdown:SetAlpha(isUnicode and 1 or 0.45)
 
-    local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
-    local currentStage = self.currentStage or "none"
-    panel.statusText:SetText("Current boss: " .. tostring(currentBoss) .. "  Phase: " .. tostring(currentStage))
+    self:RefreshPhaseRuleStatus()
 
     local keys = {}
     for key in pairs(db.rules or {}) do
@@ -571,14 +678,18 @@ function WC:RefreshOptionsPanel()
         if key then
             local rule = db.rules[key]
             row.text:SetText((rule.label or key) .. " -> " .. self:FormatPhaseList(rule.phases))
-            row.button.ruleKey = key
+            row.editButton.ruleKey = key
+            row.deleteButton.ruleKey = key
             row.text:Show()
-            row.button:Show()
+            row.editButton:Show()
+            row.deleteButton:Show()
         else
-            row.button.ruleKey = nil
+            row.editButton.ruleKey = nil
+            row.deleteButton.ruleKey = nil
             row.text:SetText("")
             row.text:Hide()
-            row.button:Hide()
+            row.editButton:Hide()
+            row.deleteButton:Hide()
         end
     end
 

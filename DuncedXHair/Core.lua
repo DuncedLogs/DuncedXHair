@@ -1022,6 +1022,10 @@ function WC:RefreshVisibility()
     else
         self.frame:Hide()
     end
+
+    if self.RefreshPhaseRuleStatus then
+        self:RefreshPhaseRuleStatus()
+    end
 end
 
 local function registerBigWigsMessage(target, message, method)
