@@ -122,10 +122,21 @@ local function openColorPicker(owner)
         r = db.customR or 1,
         g = db.customG or 1,
         b = db.customB or 1,
+        class_colored = db.class_colored,
     }
 
+    local function getPickerColor()
+        if ColorPickerFrame.GetColorRGB then
+            return ColorPickerFrame:GetColorRGB()
+        end
+        if ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker and ColorPickerFrame.Content.ColorPicker.GetColorRGB then
+            return ColorPickerFrame.Content.ColorPicker:GetColorRGB()
+        end
+        return previous.r, previous.g, previous.b
+    end
+
     local function updateColor()
-        local r, g, b = ColorPickerFrame:GetColorRGB()
+        local r, g, b = getPickerColor()
         db.class_colored = false
         db.customR = r
         db.customG = g
@@ -135,6 +146,7 @@ local function openColorPicker(owner)
     end
 
     local function cancelColor()
+        db.class_colored = previous.class_colored
         db.customR = previous.r
         db.customG = previous.g
         db.customB = previous.b
@@ -142,12 +154,27 @@ local function openColorPicker(owner)
         WC:RefreshOptionsPanel()
     end
 
-    ColorPickerFrame:SetColorRGB(previous.r, previous.g, previous.b)
-    ColorPickerFrame.hasOpacity = false
-    ColorPickerFrame.previousValues = previous
-    ColorPickerFrame.func = updateColor
-    ColorPickerFrame.cancelFunc = cancelColor
-    ColorPickerFrame:Show()
+    db.class_colored = false
+    WC:UpdateColor()
+    WC:RefreshOptionsPanel()
+
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = previous.r,
+            g = previous.g,
+            b = previous.b,
+            hasOpacity = false,
+            swatchFunc = updateColor,
+            cancelFunc = cancelColor,
+        })
+    else
+        ColorPickerFrame:SetColorRGB(previous.r, previous.g, previous.b)
+        ColorPickerFrame.hasOpacity = false
+        ColorPickerFrame.previousValues = previous
+        ColorPickerFrame.func = updateColor
+        ColorPickerFrame.cancelFunc = cancelColor
+        ColorPickerFrame:Show()
+    end
 
     if owner then
         owner:SetChecked(false)
@@ -221,6 +248,20 @@ function WC:CreateOptionsPanel()
     end)
     panel.colorButton = colorButton
 
+    local colorSwatch = CreateFrame("Button", nextName("ColorSwatch"), panel)
+    colorSwatch:SetSize(24, 24)
+    colorSwatch:SetPoint("LEFT", colorButton, "RIGHT", 8, 0)
+    colorSwatch.bg = colorSwatch:CreateTexture(nil, "BACKGROUND")
+    colorSwatch.bg:SetAllPoints()
+    colorSwatch.bg:SetColorTexture(0, 0, 0, 1)
+    colorSwatch.tex = colorSwatch:CreateTexture(nil, "ARTWORK")
+    colorSwatch.tex:SetPoint("TOPLEFT", 2, -2)
+    colorSwatch.tex:SetPoint("BOTTOMRIGHT", -2, 2)
+    colorSwatch:SetScript("OnClick", function()
+        openColorPicker(classColor)
+    end)
+    panel.colorSwatch = colorSwatch
+
     local visibilityLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     visibilityLabel:SetPoint("TOPLEFT", classColor, "BOTTOMLEFT", 0, -16)
     visibilityLabel:SetText("Visibility")
@@ -244,7 +285,6 @@ function WC:CreateOptionsPanel()
 
     local shapeValues = {
         { text = "Cross", value = "Cross" },
-        { text = "Dot", value = "Dot" },
         { text = "Circle", value = "Circle" },
         { text = "Square", value = "Square" },
     }
@@ -316,8 +356,15 @@ function WC:CreateOptionsPanel()
     border:SetWidth(220)
     panel.borderSlider = border
 
+    local fill = makeSlider(panel, "Fill amount", 0, 1, 0.01, function(value)
+        self.db.fill = value
+    end)
+    fill:SetPoint("TOPLEFT", border, "BOTTOMLEFT", 0, -38)
+    fill:SetWidth(220)
+    panel.fillSlider = fill
+
     local ruleTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    ruleTitle:SetPoint("TOPLEFT", border, "BOTTOMLEFT", -4, -34)
+    ruleTitle:SetPoint("TOPLEFT", fill, "BOTTOMLEFT", -4, -34)
     ruleTitle:SetText("Boss phase rules")
 
     local bossLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -451,6 +498,8 @@ function WC:RefreshOptionsPanel()
     panel.horizontalCheck:SetChecked(db.lockHorizontal)
     panel.phaseCheck:SetChecked(db.phaseRulesEnabled)
     panel.classColorCheck:SetChecked(db.class_colored)
+    panel.colorButton:SetText(db.class_colored and "Custom Color" or "Edit Color")
+    panel.colorSwatch.tex:SetColorTexture(db.customR or 1, db.customG or 1, db.customB or 1, 1)
     UIDropDownMenu_SetSelectedValue(panel.visibilityDropdown, db.visibility)
     UIDropDownMenu_SetText(panel.visibilityDropdown, self.visibilityLabels[db.visibility] or db.visibility)
     UIDropDownMenu_SetSelectedValue(panel.shapeDropdown, db.shape)
@@ -461,9 +510,14 @@ function WC:RefreshOptionsPanel()
     panel.thicknessSlider:SetValue(db.thickness)
     panel.innerLengthSlider:SetValue(db.inner_length)
     panel.borderSlider:SetValue(db.border_size)
+    panel.fillSlider:SetValue(db.fill or 0)
     panel.showAfterSlider:SetValue(db.combatShowAfter or 0)
     panel.hideAfterSlider:SetValue(db.combatHideAfter or 0)
     panel.lingerSlider:SetValue(db.combatEndDelay or 0)
+
+    local canFill = db.shape == "Circle" or db.shape == "Square"
+    panel.fillSlider:SetEnabled(canFill)
+    panel.fillSlider:SetAlpha(canFill and 1 or 0.45)
 
     local currentBoss = self.currentEncounterName or self.currentBossModName or self.manualBossName or "none"
     local currentStage = self.currentStage or "none"

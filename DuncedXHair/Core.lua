@@ -15,6 +15,7 @@ local defaults = {
     thickness = 2,
     inner_length = 30,
     border_size = 3,
+    fill = 0,
     lockHorizontal = false,
     class_colored = true,
     customR = 1,
@@ -47,7 +48,6 @@ WC.visibilityLabels = visibilityLabels
 
 local shapeLabels = {
     Cross = "Cross",
-    Dot = "Dot",
     Circle = "Circle",
     Square = "Square",
 }
@@ -329,18 +329,22 @@ function WC:CreateCrosshair()
         crosshair:StopMovingOrSizing()
     end)
 
+    self.frame = frame
+    self.linePools = {}
+    self.allLines = {}
+    self.rectPools = {}
+    self.allRects = {}
+
     local function makeBar(name)
         local bar = CreateFrame("Frame", name, frame)
         bar:EnableMouse(false)
         local texture = bar:CreateTexture(nil, "BACKGROUND")
         texture:SetAllPoints()
         bar.tex = texture
+        self.allRects[#self.allRects + 1] = bar
         return bar
     end
 
-    self.frame = frame
-    self.linePools = {}
-    self.allLines = {}
     self.bars = {
         outerVertical = makeBar("DuncedXHairOuterVertical"),
         outerHorizontal = makeBar("DuncedXHairOuterHorizontal"),
@@ -353,9 +357,9 @@ function WC:NormalizeShape(value)
     value = trim(value):lower():gsub("[%s_%-]+", "")
     if value == "cross" or value == "plus" or value == "xhair" then
         return "Cross"
-    elseif value == "dot" then
-        return "Dot"
-    elseif value == "circle" or value == "ring" then
+    elseif value == "dot" or value == "filledcircle" then
+        return "Circle", 1
+    elseif value == "circle" or value == "ring" or value == "round" then
         return "Circle"
     elseif value == "square" or value == "box" then
         return "Square"
@@ -373,6 +377,9 @@ end
 function WC:HideShapeElements()
     for _, bar in pairs(self.bars or {}) do
         bar:Hide()
+    end
+    for _, rect in ipairs(self.allRects or {}) do
+        rect:Hide()
     end
     for _, line in ipairs(self.allLines or {}) do
         line:Hide()
@@ -408,6 +415,41 @@ function WC:SetLine(poolName, index, x1, y1, x2, y2, thickness, r, g, b, a, subL
     line:SetThickness(thickness)
     line:SetColorTexture(r, g, b, a or 1)
     line:Show()
+end
+
+function WC:GetRect(poolName, index)
+    if not self.frame then
+        return nil
+    end
+
+    self.rectPools[poolName] = self.rectPools[poolName] or {}
+    local pool = self.rectPools[poolName]
+    if not pool[index] then
+        local rect = CreateFrame("Frame", nil, self.frame)
+        rect:EnableMouse(false)
+        local texture = rect:CreateTexture(nil, "BACKGROUND")
+        texture:SetAllPoints()
+        rect.tex = texture
+        pool[index] = rect
+        self.allRects[#self.allRects + 1] = rect
+    end
+    return pool[index]
+end
+
+function WC:SetRect(poolName, index, width, height, x, y, r, g, b, a, subLevel)
+    local rect = self:GetRect(poolName, index)
+    if not rect then
+        return
+    end
+
+    width = math.max(0.5, width)
+    height = math.max(0.5, height)
+    rect:ClearAllPoints()
+    rect:SetSize(width, height)
+    rect:SetPoint("CENTER", self.frame, "CENTER", x or 0, y or 0)
+    rect.tex:SetDrawLayer("BACKGROUND", subLevel or 0)
+    rect.tex:SetColorTexture(r, g, b, a or 1)
+    rect:Show()
 end
 
 function WC:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
@@ -446,67 +488,87 @@ function WC:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
     self.bars.innerHorizontal:Show()
 end
 
-function WC:ApplyCircleShape(thickness, innerLength, borderSize, r, g, b)
-    local radius = innerLength / 2
-    local frameSize = innerLength + thickness + (borderSize * 2) + 4
-    local segments = 48
-    local outerThickness = math.max(1, thickness + (borderSize * 2))
+function WC:GetFillHoleRadius(radius, thickness, fill)
+    fill = clamp(fill, 0, 1)
+    if fill >= 1 then
+        return 0
+    end
 
-    self.frame:SetSize(frameSize, frameSize)
+    local ringThickness = math.max(thickness, radius * fill)
+    return math.max(0, radius - ringThickness)
+end
 
-    for index = 1, segments do
-        local angle1 = ((index - 1) / segments) * math.pi * 2
-        local angle2 = (index / segments) * math.pi * 2
-        local x1 = math.cos(angle1) * radius
-        local y1 = math.sin(angle1) * radius
-        local x2 = math.cos(angle2) * radius
-        local y2 = math.sin(angle2) * radius
+function WC:DrawCircleBand(poolName, radius, holeRadius, r, g, b, a, subLevel)
+    if not self.frame or not self.frame.CreateLine or radius <= 0 then
+        return
+    end
 
-        self:SetLine("circleOuter", index, x1, y1, x2, y2, outerThickness, 0, 0, 0, 1, 0)
-        self:SetLine("circleInner", index, x1, y1, x2, y2, thickness, r, g, b, 1, 1)
+    holeRadius = math.max(0, math.min(holeRadius or 0, radius))
+    local diameter = radius * 2
+    local segments = math.min(256, math.max(48, math.ceil(diameter)))
+    local step = diameter / segments
+    local lineThickness = math.max(1, step + 0.35)
+    local lineIndex = 0
+
+    for row = 1, segments do
+        local y = -radius + ((row - 0.5) * step)
+        local outerHalf = math.sqrt(math.max(0, (radius * radius) - (y * y)))
+
+        if holeRadius > 0 and math.abs(y) < holeRadius then
+            local innerHalf = math.sqrt(math.max(0, (holeRadius * holeRadius) - (y * y)))
+            if outerHalf > innerHalf then
+                lineIndex = lineIndex + 1
+                self:SetLine(poolName, lineIndex, -outerHalf, y, -innerHalf, y, lineThickness, r, g, b, a, subLevel)
+                lineIndex = lineIndex + 1
+                self:SetLine(poolName, lineIndex, innerHalf, y, outerHalf, y, lineThickness, r, g, b, a, subLevel)
+            end
+        else
+            lineIndex = lineIndex + 1
+            self:SetLine(poolName, lineIndex, -outerHalf, y, outerHalf, y, lineThickness, r, g, b, a, subLevel)
+        end
     end
 end
 
-function WC:ApplySquareShape(thickness, innerLength, borderSize, r, g, b)
-    local radius = innerLength / 2
-    local frameSize = innerLength + thickness + (borderSize * 2) + 4
-    local outerThickness = math.max(1, thickness + (borderSize * 2))
-    local points = {
-        { -radius, radius, radius, radius },
-        { radius, radius, radius, -radius },
-        { radius, -radius, -radius, -radius },
-        { -radius, -radius, -radius, radius },
-    }
-
-    self.frame:SetSize(frameSize, frameSize)
-
-    for index, point in ipairs(points) do
-        self:SetLine("squareOuter", index, point[1], point[2], point[3], point[4], outerThickness, 0, 0, 0, 1, 0)
-        self:SetLine("squareInner", index, point[1], point[2], point[3], point[4], thickness, r, g, b, 1, 1)
-    end
-end
-
-function WC:ApplyDotShape(thickness, innerLength, borderSize, r, g, b)
+function WC:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
     local radius = innerLength / 2
     local outerRadius = radius + borderSize
-    local segments = 19
+    local holeRadius = self:GetFillHoleRadius(radius, thickness, fill)
+    local borderHoleRadius = math.max(0, holeRadius - borderSize)
     local frameSize = (outerRadius * 2) + 4
-    local outerLineThickness = math.max(1, (outerRadius * 2) / segments)
-    local innerLineThickness = math.max(1, ((radius * 2) / segments) + ((thickness - 1) * 0.1))
 
     self.frame:SetSize(frameSize, frameSize)
+    self:DrawCircleBand("circleBorder", outerRadius, borderHoleRadius, 0, 0, 0, 1, 0)
+    self:DrawCircleBand("circleFill", radius, holeRadius, r, g, b, 1, 1)
+end
 
-    for index = 1, segments do
-        local y = -outerRadius + ((index - 0.5) * ((outerRadius * 2) / segments))
-        local halfWidth = math.sqrt(math.max(0, (outerRadius * outerRadius) - (y * y)))
-        self:SetLine("dotOuter", index, -halfWidth, y, halfWidth, y, outerLineThickness, 0, 0, 0, 1, 0)
+function WC:DrawSquareBand(poolName, outerHalf, holeHalf, r, g, b, a, subLevel)
+    outerHalf = math.max(0, outerHalf)
+    holeHalf = math.max(0, math.min(holeHalf or 0, outerHalf))
+
+    local outerSize = outerHalf * 2
+    if holeHalf <= 0 then
+        self:SetRect(poolName, 1, outerSize, outerSize, 0, 0, r, g, b, a, subLevel)
+        return
     end
 
-    for index = 1, segments do
-        local y = -radius + ((index - 0.5) * ((radius * 2) / segments))
-        local halfWidth = math.sqrt(math.max(0, (radius * radius) - (y * y)))
-        self:SetLine("dotInner", index, -halfWidth, y, halfWidth, y, innerLineThickness, r, g, b, 1, 1)
-    end
+    local band = outerHalf - holeHalf
+    local centerOffset = holeHalf + (band / 2)
+    self:SetRect(poolName, 1, outerSize, band, 0, centerOffset, r, g, b, a, subLevel)
+    self:SetRect(poolName, 2, outerSize, band, 0, -centerOffset, r, g, b, a, subLevel)
+    self:SetRect(poolName, 3, band, holeHalf * 2, -centerOffset, 0, r, g, b, a, subLevel)
+    self:SetRect(poolName, 4, band, holeHalf * 2, centerOffset, 0, r, g, b, a, subLevel)
+end
+
+function WC:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
+    local half = innerLength / 2
+    local outerHalf = half + borderSize
+    local holeHalf = self:GetFillHoleRadius(half, thickness, fill)
+    local borderHoleHalf = math.max(0, holeHalf - borderSize)
+    local frameSize = (outerHalf * 2) + 4
+
+    self.frame:SetSize(frameSize, frameSize)
+    self:DrawSquareBand("squareBorder", outerHalf, borderHoleHalf, 0, 0, 0, 1, 0)
+    self:DrawSquareBand("squareFill", half, holeHalf, r, g, b, 1, 1)
 end
 
 function WC:ApplyShape()
@@ -519,11 +581,13 @@ function WC:ApplyShape()
     db.thickness = round(clamp(db.thickness, 1, 32))
     db.inner_length = round(clamp(db.inner_length, 4, 256))
     db.border_size = round(clamp(db.border_size, 0, 64))
+    db.fill = clamp(db.fill, 0, 1)
     db.shape = self:NormalizeShape(db.shape) or "Cross"
 
     local thickness = db.thickness
     local innerLength = db.inner_length
     local borderSize = db.border_size
+    local fill = db.fill
     local r, g, b = self:GetDrawColor()
     local shape = db.shape
 
@@ -531,11 +595,9 @@ function WC:ApplyShape()
     self:HideShapeElements()
 
     if shape == "Circle" and self.frame.CreateLine then
-        self:ApplyCircleShape(thickness, innerLength, borderSize, r, g, b)
-    elseif shape == "Square" and self.frame.CreateLine then
-        self:ApplySquareShape(thickness, innerLength, borderSize, r, g, b)
-    elseif shape == "Dot" and self.frame.CreateLine then
-        self:ApplyDotShape(thickness, innerLength, borderSize, r, g, b)
+        self:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
+    elseif shape == "Square" then
+        self:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
     else
         db.shape = "Cross"
         self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
@@ -869,6 +931,7 @@ function WC:PrintStatus()
     self:Print("enabled=" .. tostring(db.enabled) ..
         ", locked=" .. tostring(db.locked) ..
         ", shape=" .. tostring(shapeLabels[db.shape] or db.shape) ..
+        ", fill=" .. string.format("%.0f", (db.fill or 0) * 100) .. "%" ..
         ", visibility=" .. tostring(visibilityLabels[db.visibility] or db.visibility) ..
         ", combatTiming=" .. tostring(db.combatTimingEnabled) ..
         ", showAfter=" .. tostring(db.combatShowAfter or 0) ..
@@ -883,8 +946,8 @@ function WC:PrintHelp()
     self:Print("Commands:")
     self:Print("/dxh options - open options")
     self:Print("/dxh lock, unlock, center, on, off")
-    self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3")
-    self:Print("/dxh shape cross|dot|circle|square")
+    self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3, fill 100")
+    self:Print("/dxh shape cross|circle|square. /dxh shape dot selects circle fill 100")
     self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
     self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
     self:Print("/dxh phases on|off - show only during configured boss phases")
@@ -948,12 +1011,26 @@ function WC:HandleSlash(message)
         self.db.border_size = round(clamp(rest, 0, 64))
         self:ApplySettings()
         self:Print("Border size set to " .. self.db.border_size .. ".")
+    elseif command == "fill" or command == "filled" then
+        local enabled = parseBoolean(rest)
+        local value = tonumber(rest)
+        if enabled ~= nil then
+            value = enabled and 1 or 0
+        elseif value and value > 1 then
+            value = value / 100
+        end
+        self.db.fill = clamp(value, 0, 1)
+        self:ApplySettings()
+        self:Print("Fill set to " .. string.format("%.0f", self.db.fill * 100) .. "%.")
     elseif command == "shape" or command == "texture" then
-        local shape = self:NormalizeShape(rest)
+        local shape, requestedFill = self:NormalizeShape(rest)
         if not shape then
-            self:Print("Shape values: cross, dot, circle, square.")
+            self:Print("Shape values: cross, circle, square. Dot is circle with fill 100.")
         else
             self.db.shape = shape
+            if requestedFill ~= nil then
+                self.db.fill = requestedFill
+            end
             self:ApplySettings()
             self:Print("Shape set to " .. shapeLabels[shape] .. ".")
         end
@@ -1090,6 +1167,9 @@ end
 function WC:ADDON_LOADED(loadedAddonName)
     if loadedAddonName == addonName then
         DuncedXHairDB = DuncedXHairDB or WilduCrosshairDB or {}
+        if DuncedXHairDB.shape == "Dot" and DuncedXHairDB.fill == nil then
+            DuncedXHairDB.fill = 1
+        end
         copyDefaults(defaults, DuncedXHairDB)
         self.db = DuncedXHairDB
 

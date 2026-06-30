@@ -27,6 +27,7 @@ Useful commands:
 /dxh thickness 3
 /dxh border 4
 /dxh shape circle
+/dxh fill 100
 /dxh combat on
 /dxh combat off
 /dxh timing on
@@ -35,7 +36,9 @@ Useful commands:
 /dxh linger 2
 ```
 
-`shape` supports `cross`, `dot`, `circle`, and `square`. `thickness` controls line/ring thickness, `size` controls the overall shape size, and `border` controls the black outline.
+`shape` supports `cross`, `circle`, and `square`. `thickness` controls line/ring thickness, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
+
+Use `/dxh fill 0` for an outline, `/dxh fill 100` for a filled shape, or any value between.
 
 Combat timing:
 
