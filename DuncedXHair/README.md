@@ -27,10 +27,6 @@ Useful commands:
 /dxh thickness 3
 /dxh border 4
 /dxh shape circle
-/dxh shape unicode
-/dxh symbol +
-/dxh symbol filledcircle
-/dxh weight bold
 /dxh fill 100
 /dxh combat on
 /dxh combat off
@@ -40,9 +36,11 @@ Useful commands:
 /dxh linger 2
 ```
 
-`shape` supports `cross`, `circle`, `square`, and `unicode`. Unicode mode uses a selectable font symbol such as `+`, `○`, `●`, `□`, or `■`. Use `/dxh symbol +` or pick a symbol in the options panel. `weight` supports `light`, `regular`, `medium`, and `bold` in unicode mode.
+`shape` supports `cross`, `circle`, and `square`. Use `/dxh shape dot` for a fully filled circle.
 
 `thickness` controls line/ring thickness for circle and square, `size` controls the overall shape size, `border` controls the black outline, and `fill` controls how filled circle and square shapes are.
+
+Cross, circle, and square each remember their own alpha, thickness, size, width, height, border, and fill settings.
 
 Use `/dxh fill 0` for an outline, `/dxh fill 100` for a filled shape, or any value between.
 

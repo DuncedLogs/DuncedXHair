@@ -5,10 +5,10 @@ Standalone World of Warcraft addon for a movable center-screen crosshair with co
 ## Features
 
 - Movable and lockable crosshair frame
-- Shapes: cross, circle, square, unicode symbol
+- Shapes: cross, circle, square
 - Adjustable size, thickness, border, alpha, class color, and custom color
+- Separate visual settings remembered for each shape
 - Fill amount for circle and square shapes
-- Unicode symbol picker with light/regular/medium/bold weights
 - Visibility modes for combat and instances
 - Combat timing rules:
   - show after N seconds in combat
@@ -40,10 +40,6 @@ World of Warcraft/_retail_/Interface/AddOns/DuncedXHair/DuncedXHair.toc
 /dxh shape cross
 /dxh shape circle
 /dxh shape square
-/dxh shape unicode
-/dxh symbol +
-/dxh symbol filledcircle
-/dxh weight regular
 /dxh size 64
 /dxh thickness 3
 /dxh border 4

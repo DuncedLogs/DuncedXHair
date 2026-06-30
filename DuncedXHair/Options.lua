@@ -24,6 +24,13 @@ local function setControlText(control, text)
     end
 end
 
+local function setDropdownFont(dropdown, fontObject)
+    local fontString = controlText(dropdown)
+    if fontString and fontObject and fontString.SetFontObject then
+        fontString:SetFontObject(fontObject)
+    end
+end
+
 local function makeButton(parent, text, width)
     local button = CreateFrame("Button", nextName("Button"), parent, "UIPanelButtonTemplate")
     button:SetSize(width or 96, 24)
@@ -76,7 +83,6 @@ local function makeSlider(parent, text, minimum, maximum, step, onValueChanged)
         end
         onValueChanged(value)
         WC:ApplySettings()
-        WC:RefreshOptionsPanel()
     end)
 
     return slider
@@ -89,7 +95,7 @@ local function makeEditBox(parent, width)
     return box
 end
 
-local function makeDropdown(parent, width, values, onSelect)
+local function makeDropdown(parent, width, values, onSelect, fontObject)
     local dropdown = CreateFrame("Frame", nextName("Dropdown"), parent, "UIDropDownMenuTemplate")
     UIDropDownMenu_SetWidth(dropdown, width)
     UIDropDownMenu_Initialize(dropdown, function(_, level)
@@ -100,6 +106,7 @@ local function makeDropdown(parent, width, values, onSelect)
             local info = UIDropDownMenu_CreateInfo()
             info.text = value.text
             info.value = value.value
+            info.fontObject = value.fontObject or fontObject
             info.func = function()
                 onSelect(value.value)
                 UIDropDownMenu_SetSelectedValue(dropdown, value.value)
@@ -109,6 +116,8 @@ local function makeDropdown(parent, width, values, onSelect)
             UIDropDownMenu_AddButton(info)
         end
     end)
+    dropdown.fontObject = fontObject
+    setDropdownFont(dropdown, fontObject)
     return dropdown
 end
 
@@ -250,7 +259,7 @@ function WC:CreateOptionsPanel()
     panel.scrollFrame = scroll
 
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(640, 940)
+    content:SetSize(640, 1020)
     scroll:SetScrollChild(content)
     panel.content = content
 
@@ -300,7 +309,7 @@ function WC:CreateOptionsPanel()
 
     local phaseRules = CreateFrame("Frame", nil, content)
     phaseRules:SetPoint("TOPLEFT", phaseOnly, "BOTTOMLEFT", 0, -8)
-    phaseRules:SetSize(360, 218)
+    phaseRules:SetSize(360, 280)
     panel.phaseRuleFrame = phaseRules
 
     local classColor = makeCheck(content, "Use class color", function(value)
@@ -356,51 +365,24 @@ function WC:CreateOptionsPanel()
         { text = "Cross", value = "Cross" },
         { text = "Circle", value = "Circle" },
         { text = "Square", value = "Square" },
-        { text = "Unicode", value = "Unicode" },
     }
     local shape = makeDropdown(content, 140, shapeValues, function(value)
-        self.db.shape = value
+        self:SetShape(value)
     end)
     shape:SetPoint("TOPLEFT", shapeLabel, "BOTTOMLEFT", -16, -2)
     panel.shapeDropdown = shape
-
-    local symbolLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    symbolLabel:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -12)
-    symbolLabel:SetText("Unicode symbol")
-
-    local symbol = makeDropdown(content, 140, self.unicodeSymbolValues, function(value)
-        self.db.shape = "Unicode"
-        self.db.unicodeSymbol = value
-    end)
-    symbol:SetPoint("TOPLEFT", symbolLabel, "BOTTOMLEFT", -16, -2)
-    panel.unicodeSymbolDropdown = symbol
-
-    local glyphWeightLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    glyphWeightLabel:SetPoint("TOPLEFT", symbol, "BOTTOMLEFT", 16, -12)
-    glyphWeightLabel:SetText("Unicode weight")
-
-    local glyphWeightValues = {
-        { text = "Light", value = "Light" },
-        { text = "Regular", value = "Regular" },
-        { text = "Medium", value = "Medium" },
-        { text = "Bold", value = "Bold" },
-    }
-    local glyphWeight = makeDropdown(content, 140, glyphWeightValues, function(value)
-        self.db.glyphWeight = value
-    end)
-    glyphWeight:SetPoint("TOPLEFT", glyphWeightLabel, "BOTTOMLEFT", -16, -2)
-    panel.glyphWeightDropdown = glyphWeight
 
     local timing = makeCheck(content, "Use combat timing", function(value)
         self.db.combatTimingEnabled = value
         self:UpdateCombatTicker()
     end)
-    timing:SetPoint("TOPLEFT", glyphWeight, "BOTTOMLEFT", 16, -14)
+    timing:SetPoint("TOPLEFT", shape, "BOTTOMLEFT", 16, -14)
     panel.timingCheck = timing
 
     local showAfter = makeSlider(content, "Show after combat start", 0, 120, 1, function(value)
         self.db.combatShowAfter = value
         self.db.combatTimingEnabled = true
+        panel.timingCheck:SetChecked(true)
         self:UpdateCombatTicker()
     end)
     showAfter:SetPoint("TOPLEFT", timing, "BOTTOMLEFT", 4, -30)
@@ -410,6 +392,7 @@ function WC:CreateOptionsPanel()
     local hideAfter = makeSlider(content, "Hide after combat time", 0, 600, 1, function(value)
         self.db.combatHideAfter = value
         self.db.combatTimingEnabled = true
+        panel.timingCheck:SetChecked(true)
         self:UpdateCombatTicker()
     end)
     hideAfter:SetPoint("TOPLEFT", showAfter, "BOTTOMLEFT", 0, -38)
@@ -419,6 +402,7 @@ function WC:CreateOptionsPanel()
     local linger = makeSlider(content, "Linger after combat", 0, 120, 1, function(value)
         self.db.combatEndDelay = value
         self.db.combatTimingEnabled = true
+        panel.timingCheck:SetChecked(true)
         self:UpdateCombatTicker()
     end)
     linger:SetPoint("TOPLEFT", hideAfter, "BOTTOMLEFT", 0, -38)
@@ -439,17 +423,43 @@ function WC:CreateOptionsPanel()
     thickness:SetWidth(220)
     panel.thicknessSlider = thickness
 
-    local innerLength = makeSlider(content, "Inner length", 4, 256, 1, function(value)
+    local innerLength = makeSlider(content, "Size", 4, 256, 1, function(value)
         self.db.inner_length = value
+        if self.db.shape == "Cross" or self.db.shape == "Square" then
+            self.db.width = value
+            self.db.height = value
+            self.optionsUpdating = true
+            if panel.widthSlider then
+                panel.widthSlider:SetValue(value)
+            end
+            if panel.heightSlider then
+                panel.heightSlider:SetValue(value)
+            end
+            self.optionsUpdating = false
+        end
     end)
     innerLength:SetPoint("TOPLEFT", thickness, "BOTTOMLEFT", 0, -38)
     innerLength:SetWidth(220)
     panel.innerLengthSlider = innerLength
 
+    local width = makeSlider(content, "Width", 4, 256, 1, function(value)
+        self.db.width = value
+    end)
+    width:SetPoint("TOPLEFT", innerLength, "BOTTOMLEFT", 0, -38)
+    width:SetWidth(220)
+    panel.widthSlider = width
+
+    local height = makeSlider(content, "Height", 4, 256, 1, function(value)
+        self.db.height = value
+    end)
+    height:SetPoint("TOPLEFT", width, "BOTTOMLEFT", 0, -38)
+    height:SetWidth(220)
+    panel.heightSlider = height
+
     local border = makeSlider(content, "Border size", 0, 64, 1, function(value)
         self.db.border_size = value
     end)
-    border:SetPoint("TOPLEFT", innerLength, "BOTTOMLEFT", 0, -38)
+    border:SetPoint("TOPLEFT", height, "BOTTOMLEFT", 0, -38)
     border:SetWidth(220)
     panel.borderSlider = border
 
@@ -649,16 +659,27 @@ function WC:RefreshOptionsPanel()
     end
 
     self.optionsUpdating = true
+    db.shape = self:NormalizeShape(db.shape) or "Cross"
 
     panel.lockButton:SetText(db.locked and "Unlock" or "Lock")
     panel.enabledCheck:SetChecked(db.enabled)
     panel.previewCheck:SetChecked(db.showWhileUnlocked)
     panel.horizontalCheck:SetChecked(db.lockHorizontal)
     panel.phaseCheck:SetChecked(db.phaseRulesEnabled)
+    local keys = {}
+    for key in pairs(db.rules or {}) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys)
+
+    local visibleRuleCount = math.min(#keys, #(panel.ruleRows or {}))
+    local phaseRuleHeight = 280 + (visibleRuleCount * 30)
     panel.phaseRuleFrame:SetShown(db.phaseRulesEnabled)
+    panel.phaseRuleFrame:SetHeight(phaseRuleHeight)
+    panel.content:SetHeight(1020 + (db.phaseRulesEnabled and math.max(0, phaseRuleHeight - 218) or 0))
     panel.classColorCheck:ClearAllPoints()
     if db.phaseRulesEnabled then
-        panel.classColorCheck:SetPoint("TOPLEFT", panel.phaseRuleFrame, "BOTTOMLEFT", 0, -8)
+        panel.classColorCheck:SetPoint("TOPLEFT", panel.phaseRuleFrame, "BOTTOMLEFT", 0, -12)
     else
         panel.classColorCheck:SetPoint("TOPLEFT", panel.phaseCheck, "BOTTOMLEFT", 0, -8)
     end
@@ -669,17 +690,13 @@ function WC:RefreshOptionsPanel()
     UIDropDownMenu_SetText(panel.visibilityDropdown, self.visibilityLabels[db.visibility] or db.visibility)
     UIDropDownMenu_SetSelectedValue(panel.shapeDropdown, db.shape)
     UIDropDownMenu_SetText(panel.shapeDropdown, self.shapeLabels[db.shape] or db.shape)
-    local unicodeSymbol = self:NormalizeUnicodeSymbol(db.unicodeSymbol) or "+"
-    UIDropDownMenu_SetSelectedValue(panel.unicodeSymbolDropdown, unicodeSymbol)
-    UIDropDownMenu_SetText(panel.unicodeSymbolDropdown, unicodeSymbol)
-    local glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or "Regular"
-    UIDropDownMenu_SetSelectedValue(panel.glyphWeightDropdown, glyphWeight)
-    UIDropDownMenu_SetText(panel.glyphWeightDropdown, self.glyphWeightLabels[glyphWeight] or glyphWeight)
     panel.timingCheck:SetChecked(db.combatTimingEnabled)
 
     panel.alphaSlider:SetValue(db.alpha)
     panel.thicknessSlider:SetValue(db.thickness)
     panel.innerLengthSlider:SetValue(db.inner_length)
+    panel.widthSlider:SetValue(db.width or db.inner_length)
+    panel.heightSlider:SetValue(db.height or db.inner_length)
     panel.borderSlider:SetValue(db.border_size)
     panel.fillSlider:SetValue(db.fill or 0)
     panel.showAfterSlider:SetValue(db.combatShowAfter or 0)
@@ -687,19 +704,19 @@ function WC:RefreshOptionsPanel()
     panel.lingerSlider:SetValue(db.combatEndDelay or 0)
 
     local canFill = db.shape == "Circle" or db.shape == "Square"
-    local isUnicode = db.shape == "Unicode"
+    local canUseAxes = db.shape == "Cross" or db.shape == "Square"
+    panel.thicknessSlider:SetEnabled(true)
+    panel.thicknessSlider:SetAlpha(1)
+    panel.widthSlider:SetEnabled(canUseAxes)
+    panel.widthSlider:SetAlpha(canUseAxes and 1 or 0.45)
+    panel.heightSlider:SetEnabled(canUseAxes)
+    panel.heightSlider:SetAlpha(canUseAxes and 1 or 0.45)
+    panel.borderSlider:SetEnabled(true)
+    panel.borderSlider:SetAlpha(1)
     panel.fillSlider:SetEnabled(canFill)
     panel.fillSlider:SetAlpha(canFill and 1 or 0.45)
-    panel.unicodeSymbolDropdown:SetAlpha(isUnicode and 1 or 0.45)
-    panel.glyphWeightDropdown:SetAlpha(isUnicode and 1 or 0.45)
 
     self:RefreshPhaseRuleStatus()
-
-    local keys = {}
-    for key in pairs(db.rules or {}) do
-        keys[#keys + 1] = key
-    end
-    table.sort(keys)
 
     for index, row in ipairs(panel.ruleRows) do
         local key = keys[index]

@@ -11,8 +11,6 @@ local defaults = {
     visibility = "Always",
     phaseRulesEnabled = false,
     shape = "Cross",
-    unicodeSymbol = "+",
-    glyphWeight = "Regular",
     alpha = 1,
     thickness = 2,
     inner_length = 30,
@@ -52,46 +50,41 @@ local shapeLabels = {
     Cross = "Cross",
     Circle = "Circle",
     Square = "Square",
-    Unicode = "Unicode",
 }
 
 WC.shapeLabels = shapeLabels
 
-local glyphWeightLabels = {
-    Light = "Light",
-    Regular = "Regular",
-    Medium = "Medium",
-    Bold = "Bold",
+local shapeOrder = { "Cross", "Circle", "Square" }
+local shapeSettingKeys = { "alpha", "thickness", "inner_length", "width", "height", "border_size", "fill" }
+local shapeSettingDefaults = {
+    Cross = {
+        alpha = 1,
+        thickness = 2,
+        inner_length = 30,
+        width = 30,
+        height = 30,
+        border_size = 3,
+        fill = 0,
+    },
+    Circle = {
+        alpha = 1,
+        thickness = 2,
+        inner_length = 30,
+        width = 30,
+        height = 30,
+        border_size = 3,
+        fill = 0,
+    },
+    Square = {
+        alpha = 1,
+        thickness = 2,
+        inner_length = 30,
+        width = 30,
+        height = 30,
+        border_size = 3,
+        fill = 0,
+    },
 }
-
-WC.glyphWeightLabels = glyphWeightLabels
-
-local unicodeSymbolValues = {
-    { text = "+", value = "+" },
-    { text = "○", value = "○" },
-    { text = "●", value = "●" },
-    { text = "□", value = "□" },
-    { text = "■", value = "■" },
-    { text = "•", value = "•" },
-    { text = "◎", value = "◎" },
-    { text = "◉", value = "◉" },
-    { text = "◇", value = "◇" },
-    { text = "◆", value = "◆" },
-    { text = "△", value = "△" },
-    { text = "▲", value = "▲" },
-    { text = "✚", value = "✚" },
-    { text = "✛", value = "✛" },
-    { text = "✜", value = "✜" },
-    { text = "✕", value = "✕" },
-    { text = "×", value = "×" },
-    { text = "*", value = "*" },
-    { text = "✦", value = "✦" },
-    { text = "★", value = "★" },
-}
-
-WC.unicodeSymbolValues = unicodeSymbolValues
-
-local glyphFont = "Fonts\\ARIALN.TTF"
 
 local function copyDefaults(source, target)
     for key, value in pairs(source) do
@@ -373,8 +366,6 @@ function WC:CreateCrosshair()
     self.allLines = {}
     self.rectPools = {}
     self.allRects = {}
-    self.glyphPools = {}
-    self.allGlyphs = {}
 
     local function makeBar(name)
         local bar = CreateFrame("Frame", name, frame)
@@ -404,67 +395,8 @@ function WC:NormalizeShape(value)
         return "Circle"
     elseif value == "square" or value == "box" then
         return "Square"
-    elseif value == "unicode" or value == "symbol" or value == "font" or value == "glyph" or value == "text" then
-        return "Unicode"
     end
     return nil
-end
-
-function WC:NormalizeGlyphWeight(value)
-    value = trim(value):lower():gsub("[%s_%-]+", "")
-    if value == "light" or value == "thin" then
-        return "Light"
-    elseif value == "regular" or value == "normal" then
-        return "Regular"
-    elseif value == "medium" then
-        return "Medium"
-    elseif value == "bold" or value == "heavy" or value == "thick" then
-        return "Bold"
-    end
-    return nil
-end
-
-function WC:NormalizeUnicodeSymbol(value)
-    value = trim(value)
-    if value == "" then
-        return nil
-    end
-
-    local compact = value:lower():gsub("[%s_%-_]+", "")
-    local aliases = {
-        plus = "+",
-        cross = "+",
-        circle = "○",
-        ring = "○",
-        outlinecircle = "○",
-        dot = "●",
-        filledcircle = "●",
-        bullet = "•",
-        square = "□",
-        outlinesquare = "□",
-        box = "□",
-        filledsquare = "■",
-        diamond = "◇",
-        filleddiamond = "◆",
-        triangle = "△",
-        filledtriangle = "▲",
-        x = "×",
-        multiply = "×",
-        star = "★",
-        sparkle = "✦",
-        asterisk = "*",
-    }
-    if aliases[compact] then
-        return aliases[compact]
-    end
-
-    for _, option in ipairs(unicodeSymbolValues) do
-        if value == option.value then
-            return option.value
-        end
-    end
-
-    return value
 end
 
 function WC:GetDrawColor()
@@ -483,9 +415,6 @@ function WC:HideShapeElements()
     end
     for _, line in ipairs(self.allLines or {}) do
         line:Hide()
-    end
-    for _, glyph in ipairs(self.allGlyphs or {}) do
-        glyph:Hide()
     end
 end
 
@@ -555,125 +484,41 @@ function WC:SetRect(poolName, index, width, height, x, y, r, g, b, a, subLevel)
     rect:Show()
 end
 
-function WC:GetGlyph(poolName, index)
-    if not self.frame or not self.frame.CreateFontString then
-        return nil
-    end
+function WC:ApplyCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
+    innerWidth = math.max(4, innerWidth or defaults.inner_length)
+    innerHeight = math.max(4, innerHeight or innerWidth)
 
-    self.glyphPools[poolName] = self.glyphPools[poolName] or {}
-    local pool = self.glyphPools[poolName]
-    if not pool[index] then
-        local glyph = self.frame:CreateFontString(nil, "BACKGROUND")
-        glyph:SetJustifyH("CENTER")
-        glyph:SetJustifyV("MIDDLE")
-        pool[index] = glyph
-        self.allGlyphs[#self.allGlyphs + 1] = glyph
-    end
-    return pool[index]
-end
-
-function WC:GetGlyphOffsets(weight, fontSize)
-    local offset = math.max(1, math.floor((tonumber(fontSize) or 0) / 96))
-    if weight == "Medium" then
-        return {
-            { 0, 0 },
-            { offset, 0 },
-            { -offset, 0 },
-            { 0, offset },
-            { 0, -offset },
-        }
-    elseif weight == "Bold" then
-        return {
-            { 0, 0 },
-            { offset, 0 },
-            { -offset, 0 },
-            { 0, offset },
-            { 0, -offset },
-            { offset, offset },
-            { offset, -offset },
-            { -offset, offset },
-            { -offset, -offset },
-        }
-    end
-
-    return { { 0, 0 } }
-end
-
-function WC:SetGlyph(poolName, index, text, fontSize, x, y, r, g, b, a, subLevel)
-    local glyph = self:GetGlyph(poolName, index)
-    if not glyph then
-        return false
-    end
-
-    local ok = glyph:SetFont(glyphFont, fontSize, "")
-    if not ok and STANDARD_TEXT_FONT then
-        ok = glyph:SetFont(STANDARD_TEXT_FONT, fontSize, "")
-    end
-    if not ok then
-        return false
-    end
-
-    if glyph.SetDrawLayer then
-        glyph:SetDrawLayer("BACKGROUND", subLevel or 0)
-    end
-    glyph:ClearAllPoints()
-    glyph:SetSize(fontSize * 1.5, fontSize * 1.5)
-    glyph:SetPoint("CENTER", self.frame, "CENTER", x or 0, y or 0)
-    glyph:SetText(text)
-    glyph:SetTextColor(r, g, b, a or 1)
-    glyph:Show()
-    return true
-end
-
-function WC:DrawGlyphStack(poolName, text, fontSize, weight, r, g, b, a, subLevel)
-    if not text or (a or 1) <= 0 then
-        return true
-    end
-
-    if weight == "Light" then
-        fontSize = fontSize - math.max(1, math.floor(fontSize / 64))
-    end
-    fontSize = math.max(4, round(fontSize))
-
-    local offsets = self:GetGlyphOffsets(weight, fontSize)
-    for index, offset in ipairs(offsets) do
-        if not self:SetGlyph(poolName, index, text, fontSize, offset[1], offset[2], r, g, b, a, subLevel) then
-            return false
-        end
-    end
-    return true
-end
-
-function WC:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
-    local frameSize = innerLength + thickness + borderSize
+    local frameWidth = math.max(innerWidth + borderSize, thickness + borderSize) + 4
+    local frameHeight = math.max(innerHeight + borderSize, thickness + borderSize) + 4
     local outerThickness = thickness + borderSize
-    local outerLength = innerLength + borderSize
+    local outerWidth = innerWidth + borderSize
+    local outerHeight = innerHeight + borderSize
 
-    self.frame:SetSize(frameSize, frameSize)
+    self.frame:SetSize(frameWidth, frameHeight)
 
     self.bars.outerVertical:ClearAllPoints()
-    self.bars.outerVertical:SetSize(outerThickness, outerLength)
+    self.bars.outerVertical:SetSize(outerThickness, outerHeight)
     self.bars.outerVertical:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
     self.bars.outerVertical.tex:SetDrawLayer("BACKGROUND", 0)
     self.bars.outerVertical.tex:SetColorTexture(0, 0, 0, 1)
     self.bars.outerVertical:Show()
 
     self.bars.outerHorizontal:ClearAllPoints()
-    self.bars.outerHorizontal:SetSize(outerLength, outerThickness)
+    self.bars.outerHorizontal:SetSize(outerWidth, outerThickness)
     self.bars.outerHorizontal:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
     self.bars.outerHorizontal.tex:SetDrawLayer("BACKGROUND", 0)
     self.bars.outerHorizontal.tex:SetColorTexture(0, 0, 0, 1)
     self.bars.outerHorizontal:Show()
 
     self.bars.innerVertical:ClearAllPoints()
-    self.bars.innerVertical:SetSize(thickness, innerLength)
+    self.bars.innerVertical:SetSize(thickness, innerHeight)
     self.bars.innerVertical:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
     self.bars.innerVertical.tex:SetDrawLayer("BACKGROUND", 1)
     self.bars.innerVertical.tex:SetColorTexture(r, g, b, 1)
     self.bars.innerVertical:Show()
 
     self.bars.innerHorizontal:ClearAllPoints()
-    self.bars.innerHorizontal:SetSize(innerLength, thickness)
+    self.bars.innerHorizontal:SetSize(innerWidth, thickness)
     self.bars.innerHorizontal:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
     self.bars.innerHorizontal.tex:SetDrawLayer("BACKGROUND", 1)
     self.bars.innerHorizontal.tex:SetColorTexture(r, g, b, 1)
@@ -682,12 +527,9 @@ end
 
 function WC:GetFillHoleRadius(radius, thickness, fill)
     fill = clamp(fill, 0, 1)
-    if fill >= 1 then
-        return 0
-    end
-
-    local ringThickness = math.max(thickness, radius * fill)
-    return math.max(0, radius - ringThickness)
+    local outlineThickness = math.min(radius, math.max(0, thickness or 0))
+    local outlineHoleRadius = math.max(0, radius - outlineThickness)
+    return outlineHoleRadius * (1 - fill)
 end
 
 function WC:DrawCircleBand(poolName, radius, holeRadius, r, g, b, a, subLevel)
@@ -751,34 +593,138 @@ function WC:DrawSquareBand(poolName, outerHalf, holeHalf, r, g, b, a, subLevel)
     self:SetRect(poolName, 4, band, holeHalf * 2, centerOffset, 0, r, g, b, a, subLevel)
 end
 
-function WC:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
-    local half = innerLength / 2
-    local outerHalf = half + borderSize
-    local holeHalf = self:GetFillHoleRadius(half, thickness, fill)
-    local borderHoleHalf = math.max(0, holeHalf - borderSize)
-    local frameSize = (outerHalf * 2) + 4
+function WC:DrawRectBand(poolName, outerWidth, outerHeight, holeWidth, holeHeight, r, g, b, a, subLevel)
+    outerWidth = math.max(0, outerWidth)
+    outerHeight = math.max(0, outerHeight)
+    holeWidth = math.max(0, math.min(holeWidth or 0, outerWidth))
+    holeHeight = math.max(0, math.min(holeHeight or 0, outerHeight))
 
-    self.frame:SetSize(frameSize, frameSize)
-    self:DrawSquareBand("squareBorder", outerHalf, borderHoleHalf, 0, 0, 0, 1, 0)
-    self:DrawSquareBand("squareFill", half, holeHalf, r, g, b, 1, 1)
-end
-
-function WC:ApplyUnicodeShape(innerLength, borderSize, r, g, b)
-    local symbol = self:NormalizeUnicodeSymbol(self.db.unicodeSymbol) or defaults.unicodeSymbol
-    local weight = self:NormalizeGlyphWeight(self.db.glyphWeight) or defaults.glyphWeight
-    local fontSize = math.max(4, innerLength)
-    local borderFontSize = fontSize + (borderSize * 2)
-    local frameSize = borderFontSize + 16
-    local ok = true
-
-    self.frame:SetSize(frameSize, frameSize)
-
-    if borderSize > 0 then
-        ok = self:DrawGlyphStack("unicodeBorder", symbol, borderFontSize, weight, 0, 0, 0, 1, 0) and ok
+    if holeWidth <= 0 or holeHeight <= 0 then
+        self:SetRect(poolName, 1, outerWidth, outerHeight, 0, 0, r, g, b, a, subLevel)
+        return
     end
 
-    ok = self:DrawGlyphStack("unicodeColor", symbol, fontSize, weight, r, g, b, 1, 1) and ok
-    return ok
+    local topHeight = (outerHeight - holeHeight) / 2
+    local sideWidth = (outerWidth - holeWidth) / 2
+
+    if topHeight > 0 then
+        local y = (holeHeight / 2) + (topHeight / 2)
+        self:SetRect(poolName, 1, outerWidth, topHeight, 0, y, r, g, b, a, subLevel)
+        self:SetRect(poolName, 2, outerWidth, topHeight, 0, -y, r, g, b, a, subLevel)
+    end
+
+    if sideWidth > 0 then
+        local x = (holeWidth / 2) + (sideWidth / 2)
+        self:SetRect(poolName, 3, sideWidth, holeHeight, -x, 0, r, g, b, a, subLevel)
+        self:SetRect(poolName, 4, sideWidth, holeHeight, x, 0, r, g, b, a, subLevel)
+    end
+end
+
+function WC:ApplySquareShape(thickness, innerWidth, innerHeight, borderSize, fill, r, g, b)
+    innerWidth = math.max(4, innerWidth or defaults.inner_length)
+    innerHeight = math.max(4, innerHeight or innerWidth)
+
+    local halfWidth = innerWidth / 2
+    local halfHeight = innerHeight / 2
+    local outerWidth = innerWidth + (borderSize * 2)
+    local outerHeight = innerHeight + (borderSize * 2)
+    local holeHalfWidth = self:GetFillHoleRadius(halfWidth, thickness, fill)
+    local holeHalfHeight = self:GetFillHoleRadius(halfHeight, thickness, fill)
+    local borderHoleWidth = math.max(0, holeHalfWidth - borderSize) * 2
+    local borderHoleHeight = math.max(0, holeHalfHeight - borderSize) * 2
+    local frameWidth = outerWidth + 4
+    local frameHeight = outerHeight + 4
+
+    self.frame:SetSize(frameWidth, frameHeight)
+    self:DrawRectBand("squareBorder", outerWidth, outerHeight, borderHoleWidth, borderHoleHeight, 0, 0, 0, 1, 0)
+    self:DrawRectBand("squareFill", innerWidth, innerHeight, holeHalfWidth * 2, holeHalfHeight * 2, r, g, b, 1, 1)
+end
+
+function WC:EnsureShapeSettings(seedCurrent)
+    if not self.db then
+        return
+    end
+
+    local db = self.db
+    local currentShape = self:NormalizeShape(db.shape) or "Cross"
+    db.shape = currentShape
+    if type(db.shapeSettings) ~= "table" then
+        db.shapeSettings = {}
+    end
+
+    for _, shape in ipairs(shapeOrder) do
+        if type(db.shapeSettings[shape]) ~= "table" then
+            db.shapeSettings[shape] = {}
+        end
+        local settings = db.shapeSettings[shape]
+        local defaultsForShape = shapeSettingDefaults[shape]
+        for _, key in ipairs(shapeSettingKeys) do
+            if settings[key] == nil then
+                settings[key] = defaultsForShape[key]
+            end
+        end
+    end
+
+    if seedCurrent then
+        self:SaveShapeSettings(currentShape)
+    end
+end
+
+function WC:SaveShapeSettings(shape)
+    if not self.db then
+        return
+    end
+
+    shape = self:NormalizeShape(shape or self.db.shape) or "Cross"
+    self.db.shapeSettings = self.db.shapeSettings or {}
+    self.db.shapeSettings[shape] = self.db.shapeSettings[shape] or {}
+
+    local settings = self.db.shapeSettings[shape]
+    for _, key in ipairs(shapeSettingKeys) do
+        settings[key] = self.db[key]
+    end
+end
+
+function WC:LoadShapeSettings(shape)
+    if not self.db then
+        return
+    end
+
+    self:EnsureShapeSettings(false)
+    shape = self:NormalizeShape(shape or self.db.shape) or "Cross"
+    local settings = self.db.shapeSettings and self.db.shapeSettings[shape]
+    if not settings then
+        return
+    end
+
+    for _, key in ipairs(shapeSettingKeys) do
+        if settings[key] ~= nil then
+            self.db[key] = settings[key]
+        end
+    end
+end
+
+function WC:SetShape(shape, requestedFill)
+    if not self.db then
+        return false
+    end
+
+    shape = self:NormalizeShape(shape)
+    if not shape then
+        return false
+    end
+
+    self:EnsureShapeSettings(false)
+    self:SaveShapeSettings(self.db.shape)
+    self.db.shape = shape
+    self:LoadShapeSettings(shape)
+
+    if requestedFill ~= nil then
+        self.db.fill = requestedFill
+        self:SaveShapeSettings(shape)
+    end
+
+    return true
 end
 
 function WC:ApplyShape()
@@ -787,17 +733,21 @@ function WC:ApplyShape()
     end
 
     local db = self.db
+    self:EnsureShapeSettings(false)
     db.alpha = clamp(db.alpha, 0, 1)
     db.thickness = round(clamp(db.thickness, 1, 32))
     db.inner_length = round(clamp(db.inner_length, 4, 256))
+    db.width = round(clamp(db.width or db.inner_length, 4, 256))
+    db.height = round(clamp(db.height or db.inner_length, 4, 256))
     db.border_size = round(clamp(db.border_size, 0, 64))
     db.fill = clamp(db.fill, 0, 1)
     db.shape = self:NormalizeShape(db.shape) or "Cross"
-    db.unicodeSymbol = self:NormalizeUnicodeSymbol(db.unicodeSymbol) or defaults.unicodeSymbol
-    db.glyphWeight = self:NormalizeGlyphWeight(db.glyphWeight) or defaults.glyphWeight
+    self:SaveShapeSettings(db.shape)
 
     local thickness = db.thickness
     local innerLength = db.inner_length
+    local innerWidth = db.width
+    local innerHeight = db.height
     local borderSize = db.border_size
     local fill = db.fill
     local r, g, b = self:GetDrawColor()
@@ -811,21 +761,13 @@ function WC:ApplyShape()
             self:ApplyCircleShape(thickness, innerLength, borderSize, fill, r, g, b)
         else
             db.shape = "Cross"
-            self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+            self:ApplyCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
         end
     elseif shape == "Square" then
-        self:ApplySquareShape(thickness, innerLength, borderSize, fill, r, g, b)
-    elseif shape == "Unicode" then
-        if self:ApplyUnicodeShape(innerLength, borderSize, r, g, b) then
-            return
-        else
-            self:HideShapeElements()
-            db.shape = "Cross"
-            self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
-        end
+        self:ApplySquareShape(thickness, innerWidth, innerHeight, borderSize, fill, r, g, b)
     else
         db.shape = "Cross"
-        self:ApplyCrossShape(thickness, innerLength, borderSize, r, g, b)
+        self:ApplyCrossShape(thickness, innerWidth, innerHeight, borderSize, r, g, b)
     end
 end
 
@@ -860,10 +802,20 @@ function WC:SavePosition()
         return
     end
 
-    local point, _, relativePoint, x, y = self.frame:GetPoint()
+    local frameX, frameY = self.frame:GetCenter()
+    local parentX, parentY = UIParent:GetCenter()
+    local x, y
+
+    if frameX and frameY and parentX and parentY then
+        x = frameX - parentX
+        y = frameY - parentY
+    else
+        _, _, _, x, y = self.frame:GetPoint()
+    end
+
     self.db.position = self.db.position or {}
-    self.db.position.point = point or "CENTER"
-    self.db.position.relativePoint = relativePoint or "CENTER"
+    self.db.position.point = "CENTER"
+    self.db.position.relativePoint = "CENTER"
     self.db.position.x = math.floor(((x or 0) * 10) + 0.5) / 10
     self.db.position.y = math.floor(((y or 0) * 10) + 0.5) / 10
 
@@ -1160,8 +1112,6 @@ function WC:PrintStatus()
     self:Print("enabled=" .. tostring(db.enabled) ..
         ", locked=" .. tostring(db.locked) ..
         ", shape=" .. tostring(shapeLabels[db.shape] or db.shape) ..
-        ", unicodeSymbol=" .. tostring(db.unicodeSymbol or defaults.unicodeSymbol) ..
-        ", unicodeWeight=" .. tostring(glyphWeightLabels[db.glyphWeight] or db.glyphWeight) ..
         ", fill=" .. string.format("%.0f", (db.fill or 0) * 100) .. "%" ..
         ", visibility=" .. tostring(visibilityLabels[db.visibility] or db.visibility) ..
         ", combatTiming=" .. tostring(db.combatTimingEnabled) ..
@@ -1177,9 +1127,8 @@ function WC:PrintHelp()
     self:Print("Commands:")
     self:Print("/dxh options - open options")
     self:Print("/dxh lock, unlock, center, on, off")
-    self:Print("/dxh alpha 0.8, thickness 2, inner 30, border 3, fill 100")
-    self:Print("/dxh shape cross|circle|square|unicode. /dxh shape dot selects circle fill 100")
-    self:Print("/dxh symbol +, symbol circle, symbol filledcircle, weight light|regular|medium|bold")
+    self:Print("/dxh alpha 0.8, thickness 2, size 30, width 45, height 30, border 3, fill 100")
+    self:Print("/dxh shape cross|circle|square. /dxh shape dot selects circle fill 100")
     self:Print("/dxh visibility always|combat|instance|combatinstance|combatorinstance")
     self:Print("/dxh timing on|off, showafter 3, hideafter 20, linger 2")
     self:Print("/dxh phases on|off - show only during configured boss phases")
@@ -1236,9 +1185,22 @@ function WC:HandleSlash(message)
         self:ApplySettings()
         self:Print("Thickness set to " .. self.db.thickness .. ".")
     elseif command == "inner" or command == "length" or command == "size" then
-        self.db.inner_length = round(clamp(rest, 4, 256))
+        local value = round(clamp(rest, 4, 256))
+        self.db.inner_length = value
+        if self.db.shape == "Cross" or self.db.shape == "Square" then
+            self.db.width = value
+            self.db.height = value
+        end
         self:ApplySettings()
-        self:Print("Inner length set to " .. self.db.inner_length .. ".")
+        self:Print("Size set to " .. self.db.inner_length .. ".")
+    elseif command == "width" then
+        self.db.width = round(clamp(rest, 4, 256))
+        self:ApplySettings()
+        self:Print("Width set to " .. self.db.width .. ".")
+    elseif command == "height" then
+        self.db.height = round(clamp(rest, 4, 256))
+        self:ApplySettings()
+        self:Print("Height set to " .. self.db.height .. ".")
     elseif command == "border" then
         self.db.border_size = round(clamp(rest, 0, 64))
         self:ApplySettings()
@@ -1259,31 +1221,9 @@ function WC:HandleSlash(message)
         if not shape then
             self:Print("Shape values: cross, circle, square. Dot is circle with fill 100.")
         else
-            self.db.shape = shape
-            if requestedFill ~= nil then
-                self.db.fill = requestedFill
-            end
+            self:SetShape(shape, requestedFill)
             self:ApplySettings()
             self:Print("Shape set to " .. shapeLabels[shape] .. ".")
-        end
-    elseif command == "symbol" or command == "unicode" or command == "glyph" then
-        local symbol = self:NormalizeUnicodeSymbol(rest)
-        if not symbol then
-            self:Print("Use /dxh symbol +, circle, filledcircle, square, filledsquare, diamond, triangle, x, star, or a custom symbol.")
-        else
-            self.db.shape = "Unicode"
-            self.db.unicodeSymbol = symbol
-            self:ApplySettings()
-            self:Print("Unicode symbol set to " .. symbol .. ".")
-        end
-    elseif command == "weight" or command == "glyphweight" or command == "fontweight" then
-        local weight = self:NormalizeGlyphWeight(rest)
-        if not weight then
-            self:Print("Weight values: light, regular, medium, bold.")
-        else
-            self.db.glyphWeight = weight
-            self:ApplySettings()
-            self:Print("Unicode weight set to " .. glyphWeightLabels[weight] .. ".")
         end
     elseif command == "horizontal" or command == "lockhorizontal" then
         local enabled = parseBoolean(rest)
@@ -1418,11 +1358,14 @@ end
 function WC:ADDON_LOADED(loadedAddonName)
     if loadedAddonName == addonName then
         DuncedXHairDB = DuncedXHairDB or WilduCrosshairDB or {}
+        local hadShapeSettings = type(DuncedXHairDB.shapeSettings) == "table"
         if DuncedXHairDB.shape == "Dot" and DuncedXHairDB.fill == nil then
             DuncedXHairDB.fill = 1
         end
         copyDefaults(defaults, DuncedXHairDB)
         self.db = DuncedXHairDB
+        self:EnsureShapeSettings(not hadShapeSettings)
+        self:LoadShapeSettings(self.db.shape)
 
         self:CreateCrosshair()
         self:ApplySettings()
@@ -1460,3 +1403,4 @@ WC.eventFrame:SetScript("OnEvent", function(_, event, ...)
         WC[event](WC, ...)
     end
 end)
+
