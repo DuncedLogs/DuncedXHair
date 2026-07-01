@@ -5,17 +5,13 @@ Standalone World of Warcraft addon for a movable center-screen crosshair with co
 ## Features
 
 - Movable and lockable crosshair frame
-- Shapes: cross, circle, square
-- Adjustable size, thickness, border, alpha, class color, and custom color
-- Separate visual settings remembered for each shape
-- Fill amount for circle and square shapes
-- Visibility modes for combat and instances
-- Combat timing rules:
-  - show after N seconds in combat
-  - hide after N seconds in combat
-  - linger after combat ends
+- Shapes: cross, inverted cross, circle, square
+- Adjustable size, thickness, fill amount, border, alpha, class color, and custom color
+  
+**Visibility modes:**
 - Optional boss phase rules using DBM or BigWigs phase callbacks, with P1-P8 checkbox setup in options
-- Encounter ID helper in the boss phase editor for Current Season raid bosses
+- Combat/Instance visibility toggle
+- Combat time-based visibility toggle
 
 ## Install
 
@@ -52,3 +48,5 @@ World of Warcraft/_retail_/Interface/AddOns/DuncedXHair/DuncedXHair.toc
 /dxh phases on
 /dxh rule lura 2,4
 ```
+
+I used Codex Pro for creating this addon
